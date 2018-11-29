@@ -37,7 +37,9 @@ struct CMaterialParams
 	PARAM(Opacity)			\
 	PARAM(Emissive)			\
 	PARAM(Cube)				\
-	PARAM(Mask)
+	PARAM(Mask)				\
+	PARAM(Occlusion)		\
+	PARAM(Material)
 
 	bool IsNull() const
 	{
@@ -64,6 +66,8 @@ struct CMaterialParams
 	UUnrealMaterial			*Emissive;
 	UUnrealMaterial			*Cube;
 	UUnrealMaterial			*Mask;					// multiple mask textures baked into a single one
+	UUnrealMaterial			*Occlusion;
+	UUnrealMaterial			*Material;
 	// channels (used with Mask texture)
 	ETextureCannel			EmissiveChannel;
 	ETextureCannel			SpecularMaskChannel;

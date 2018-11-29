@@ -953,14 +953,14 @@ void ExportSkeletalMeshGLTF(const CSkeletalMesh* Mesh)
 		return;
 	}
 
-	FArchive* Ar = CreateExportArchive(OriginalMesh, FAO_TextFile, "%s.gltf", OriginalMesh->Name);
+	FArchive* Ar = CreateExportArchive(OriginalMesh, FAO_TextFile, "%s_export/%s.gltf", OriginalMesh->Name, OriginalMesh->Name);
 	if (Ar)
 	{
 		ExportContext Context;
 		Context.MeshName = OriginalMesh->Name;
 		Context.SkelMesh = Mesh;
 
-		FArchive* Ar2 = CreateExportArchive(OriginalMesh, 0, "%s.bin", OriginalMesh->Name);
+		FArchive* Ar2 = CreateExportArchive(OriginalMesh, 0, "%s_export/%s.bin", OriginalMesh->Name, OriginalMesh->Name);
 		assert(Ar2);
 		ExportMeshLod(Context, Mesh->Lods[0], Mesh->Lods[0].Verts, *Ar, *Ar2);
 		delete Ar;
@@ -981,14 +981,14 @@ void ExportStaticMeshGLTF(const CStaticMesh* Mesh)
 		return;
 	}
 
-	FArchive* Ar = CreateExportArchive(OriginalMesh, FAO_TextFile, "%s.gltf", OriginalMesh->Name);
+	FArchive* Ar = CreateExportArchive(OriginalMesh, FAO_TextFile, "%s_export/%s.gltf", OriginalMesh->Name, OriginalMesh->Name);
 	if (Ar)
 	{
 		ExportContext Context;
 		Context.MeshName = OriginalMesh->Name;
 		Context.StatMesh = Mesh;
 
-		FArchive* Ar2 = CreateExportArchive(OriginalMesh, 0, "%s.bin", OriginalMesh->Name);
+		FArchive* Ar2 = CreateExportArchive(OriginalMesh, 0, "%s_export/%s.bin", OriginalMesh->Name, OriginalMesh->Name);
 		assert(Ar2);
 		ExportMeshLod(Context, Mesh->Lods[0], Mesh->Lods[0].Verts, *Ar, *Ar2);
 		delete Ar;

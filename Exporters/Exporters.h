@@ -85,6 +85,14 @@ void ExportFaceFXAsset(const UFaceFXAsset *Fx);
 void WriteTGA(FArchive &Ar, int width, int height, byte *pic);
 
 // Write PNG to FArchive
-void ExportTexturePNGArchive(const UUnrealMaterial *Tex, FArchive &Ar);
+enum ExportPNGCommand
+{
+	ExportPNG_None = 0x0,
+	ExportPNG_FlipR = 0x1,
+	ExportPNG_FlipG = 0x2,
+	ExportPNG_FlipB = 0x4,
+	ExportPNG_FlipA = 0x8,
+};
+void ExportTexturePNGArchive(const UUnrealMaterial *Tex, FArchive &Ar, ExportPNGCommand command = ExportPNG_None);
 
 #endif // __EXPORT_H__

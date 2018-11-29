@@ -803,17 +803,7 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 #else
 	const UObject* OriginalMesh = Context.IsSkeletal() ? Context.SkelMesh->OriginalMesh : Context.StatMesh->OriginalMesh;
 	// Collect texture info
-	#define PROC(Arg) \
-		if (Params.Arg) \
-		{ \
-			const char *filename = GetExportFileName(OriginalMesh, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->GetPackageName()); \
-			int index = Images.Add(filename); \
-			info.Arg ## Index = index; \
-			appPrintf("Writing texture %s...\n", filename); \
-			FArchive* out = CreateExportArchive(OriginalMesh, 0, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->GetPackageName()); \
-			ExportTexturePNGArchive(Params.Arg, *out); \
-			delete out; \
-		}
+
 	TArray<MaterialIndices> Materials;
 	TArray<FString> Images;
 
@@ -826,24 +816,39 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 		CMaterialParams Params;
 		Lod.Sections[i].Material->GetParams(Params);
 
+#define PROC2(Arg, cmd) \
+		if (Params.Arg) \
+		{ \
+			const char *filename = GetExportFileName(OriginalMesh, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->GetPackageName()); \
+			int index = Images.Add(filename); \
+			info.Arg ## Index = index; \
+			appPrintf("Writing texture %s...\n", filename); \
+			FArchive* out = CreateExportArchive(OriginalMesh, 0, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->GetPackageName()); \
+			ExportTexturePNGArchive(Params.Arg, *out, cmd); \
+			delete out; \
+		}
+#define PROC1(Arg) PROC2( Arg , ExportPNG_None)
+
 #if EXPORT_GLTF_MATERIAL_DIFFUSE
-		PROC(Diffuse);
+		PROC1(Diffuse);
 #endif
 #if EXPORT_GLTF_MATERIAL_NORMAL
-		PROC(Normal);
+		// https://github.com/KhronosGroup/glTF/issues/952
+		PROC2(Normal, ExportPNG_FlipG);
 #endif
 #if EXPORT_GLTF_MATERIAL_EMISSIVE
-		PROC(Emissive);
+		PROC1(Emissive);
 #endif
 #if EXPORT_GLTF_MATERIAL_AO
-		PROC(Occlusion);
+		PROC1(Occlusion);
 #endif
 #if EXPORT_GLTF_MATERIAL_ROUGHMET
-		PROC(Material);
+		PROC1(Material);
 #endif
 	}
 	unguard;
-	#undef PROC
+	#undef PROC1
+	#undef PROC2
 
 	guard(ExportMaterials::WriteImages);
 	Ar.Printf("  \"images\" : [\n" );

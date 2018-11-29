@@ -378,7 +378,7 @@ static void WriteDDS(const CTextureData &TexData, const char *Filename)
 	unguard;
 }
 
-void ExportTexturePNGArchive(const UUnrealMaterial *Tex, FArchive &Ar)
+void ExportTexturePNGArchive(const UUnrealMaterial *Tex, FArchive &Ar, ExportPNGCommand command)
 {
 	guard(ExportTexturePNGArchive);
 
@@ -401,6 +401,22 @@ void ExportTexturePNGArchive(const UUnrealMaterial *Tex, FArchive &Ar)
 		// should erase file?
 		width = height = 1;
 		pic = new byte[4];
+	}
+
+	if (command & (ExportPNG_FlipR|ExportPNG_FlipG|ExportPNG_FlipB|ExportPNG_FlipA))
+	{
+		byte *end = pic + (height * width) * 4;
+		for (byte *src = pic; src < end; src += 4)
+		{
+			if (command & ExportPNG_FlipR)
+				*(src+0) = 255 - *(src+0);
+			if (command & ExportPNG_FlipG)
+				*(src+1) = 255 - *(src+1);
+			if (command & ExportPNG_FlipB)
+				*(src+2) = 255 - *(src+2);
+			if (command & ExportPNG_FlipA)
+				*(src+3) = 255 - *(src+3);
+		}
 	}
 
 	WritePNG(Ar, width, height, pic);

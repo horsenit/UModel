@@ -301,7 +301,7 @@ static void ExportSection(ExportContext& Context, const CBaseMeshLod& Lod, const
 		// There's some problem: V.Normal.W == 0x80 -> -1.008 instead of -1.0
 		if (Normal.w > 1.001 || Normal.w < -1.001)
 		{
-			appError("%X -> %g\n", V.Normal.Data, Normal.w);
+			appError("%X -> %1.9g\n", V.Normal.Data, Normal.w);
 		}
 	#endif
 		Tangent.w = (Normal.w < 0) ? -1 : 1;
@@ -497,8 +497,8 @@ static void ExportSkinData(ExportContext& Context, const CSkelMeshLod& Lod, FArc
 		TransformRotation(boneRot);
 
 		Ar.Printf(
-			"      \"translation\" : [ %g, %g, %g ],\n"
-			"      \"rotation\" : [ %g, %g, %g, %g ]\n",
+			"      \"translation\" : [ %1.9g, %1.9g, %1.9g ],\n"
+			"      \"rotation\" : [ %1.9g, %1.9g, %1.9g, %1.9g ]\n",
 			bonePos[0], bonePos[1], bonePos[2],
 			boneRot.x, boneRot.y, boneRot.z, boneRot.w
 		);
@@ -693,7 +693,7 @@ static void ExportAnimations(ExportContext& Context, FArchive& Ar)
 			// Prepare min/max values for time track, it's required by glTF standard
 			TimeBuf.BoundsMin = "[ 0 ]";
 			char buf[64];
-			appSprintf(ARRAY_ARG(buf), "[ %g ]", LastFrameTime * RateScale);
+			appSprintf(ARRAY_ARG(buf), "[ %1.9g ]", LastFrameTime * RateScale);
 			TimeBuf.BoundsMax = buf;
 
 			// Try to reuse TimeBuf from previous tracks
@@ -789,7 +789,7 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 			"    {\n"
 			"      \"name\" : \"%s\",\n"
 			"      \"pbrMetallicRoughness\" : {\n"
-			"        \"baseColorFactor\" : [ %g, %g, %g, 1.0 ],\n"
+			"        \"baseColorFactor\" : [ %1.9g, %1.9g, %1.9g, 1.0 ],\n"
 			"        \"metallicFactor\" : 0.1,\n"
 			"        \"roughnessFactor\" : 0.5\n"
 			"      }\n"
@@ -887,7 +887,7 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 			"    {\n"
 			"      \"name\" : \"%s\",\n"
 			"      \"pbrMetallicRoughness\" : {\n"
-			"        \"baseColorFactor\" : [ %g, %g, %g, 1.0 ],\n",
+			"        \"baseColorFactor\" : [ %1.9g, %1.9g, %1.9g, 1.0 ],\n",
 			Mat ? Mat->Name : dummyName,
 			Color[0], Color[1], Color[2]
 		);
@@ -931,7 +931,7 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 				"      \"normalTexture\" : {\n"
 				"        \"index\": %d,\n"
 				"        \"texCoord\" : %d,\n"
-				"        \"scale\" : %g\n"
+				"        \"scale\" : %1.9g\n"
 
 				"      }",
 				info.NormalIndex,

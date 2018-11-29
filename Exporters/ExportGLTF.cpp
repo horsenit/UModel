@@ -31,27 +31,6 @@ static CVec3 GetMaterialDebugColor(int Index)
 	return r;
 }
 
-static void ExportMaterial(UUnrealMaterial* Mat, FArchive& Ar, int index, bool bLast)
-{
-	char dummyName[64];
-	appSprintf(ARRAY_ARG(dummyName), "dummy_material_%d", index);
-
-	CVec3 Color = GetMaterialDebugColor(index);
-	Ar.Printf(
-		"    {\n"
-		"      \"name\" : \"%s\",\n"
-		"      \"pbrMetallicRoughness\" : {\n"
-		"        \"baseColorFactor\" : [ %g, %g, %g, 1.0 ],\n"
-		"        \"metallicFactor\" : 0.1,\n"
-		"        \"roughnessFactor\" : 0.5\n"
-		"      }\n"
-		"    }%s\n",
-		Mat ? Mat->Name : dummyName,
-		Color[0], Color[1], Color[2],
-		bLast ? "" : ","
-	);
-}
-
 // Fix vector orientation: glTF has right-handed coordinate system with Y up,
 // Unreal uses left-handed system with Z up. Also, Unreal uses 'cm' scale,
 // while glTF 'm'.
@@ -769,6 +748,232 @@ static void ExportAnimations(ExportContext& Context, FArchive& Ar)
 	unguard;
 }
 
+struct MaterialIndices
+{
+	int DiffuseIndex;
+	int NormalIndex;
+	int EmissiveIndex;
+	int OcclusionIndex;
+	int MaterialIndex;
+
+	MaterialIndices()
+	: DiffuseIndex(-1)
+	, NormalIndex(-1)
+	, EmissiveIndex(-1)
+	, OcclusionIndex(-1)
+	, MaterialIndex(-1)
+	{}
+};
+
+#define EXPORT_GLTF_MATERIALS			1
+
+#define EXPORT_GLTF_MATERIAL_DIFFUSE	1
+#define EXPORT_GLTF_MATERIAL_NORMAL		1
+#define EXPORT_GLTF_MATERIAL_EMISSIVE	1
+#define EXPORT_GLTF_MATERIAL_AO			1
+#define EXPORT_GLTF_MATERIAL_ROUGHMET	1
+
+
+static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMeshLod& Lod)
+{
+	guard(ExportMaterials);
+#if !EXPORT_GLTF_MATERIALS
+	Ar.Printf("  \"materials\" : [\n");
+	for (int i = 0; i < Lod.Sections.Num(); i++)
+	{
+		const UUnrealMaterial *Mat = Lod.Sections[i].Material;
+		char dummyName[64];
+		appSprintf(ARRAY_ARG(dummyName), "dummy_material_%d", i);
+		CVec3 Color = GetMaterialDebugColor(i);
+		Ar.Printf(
+			"    {\n"
+			"      \"name\" : \"%s\",\n"
+			"      \"pbrMetallicRoughness\" : {\n"
+			"        \"baseColorFactor\" : [ %g, %g, %g, 1.0 ],\n"
+			"        \"metallicFactor\" : 0.1,\n"
+			"        \"roughnessFactor\" : 0.5\n"
+			"      }\n"
+			"    }%s\n",
+			Mat ? Mat->Name : dummyName,
+			Color[0], Color[1], Color[2],
+			i == Lod.Sections.Num() - 1 ? "" : ","
+		);
+	}
+	Ar.Printf("  ],\n");
+#else
+	const UObject* OriginalMesh = Context.IsSkeletal() ? Context.SkelMesh->OriginalMesh : Context.StatMesh->OriginalMesh;
+	// Collect texture info
+	#define PROC(Arg) \
+		if (Params.Arg) \
+		{ \
+			const char *filename = GetExportFileName(OriginalMesh, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->GetPackageName()); \
+			int index = Images.Add(filename); \
+			info.Arg ## Index = index; \
+			appPrintf("Writing texture %s...\n", filename); \
+			FArchive* out = CreateExportArchive(OriginalMesh, 0, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->GetPackageName()); \
+			ExportTexturePNGArchive(Params.Arg, *out); \
+			delete out; \
+		}
+	TArray<MaterialIndices> Materials;
+	TArray<FString> Images;
+
+	guard(ExportMaterials::CreateFiles);
+	for (int i = 0; i < Lod.Sections.Num(); i++) {
+		Materials.AddDefaulted();
+		MaterialIndices& info = Materials[Materials.Num()-1];
+		if (!Lod.Sections[i].Material)
+			continue;
+		CMaterialParams Params;
+		Lod.Sections[i].Material->GetParams(Params);
+
+#if EXPORT_GLTF_MATERIAL_DIFFUSE
+		PROC(Diffuse);
+#endif
+#if EXPORT_GLTF_MATERIAL_NORMAL
+		PROC(Normal);
+#endif
+#if EXPORT_GLTF_MATERIAL_EMISSIVE
+		PROC(Emissive);
+#endif
+#if EXPORT_GLTF_MATERIAL_AO
+		PROC(Occlusion);
+#endif
+#if EXPORT_GLTF_MATERIAL_ROUGHMET
+		PROC(Material);
+#endif
+	}
+	unguard;
+	#undef PROC
+
+	guard(ExportMaterials::WriteImages);
+	Ar.Printf("  \"images\" : [\n" );
+	for (int i = 0; i < Images.Num(); i++)
+	{
+		const char *relativeName = strrchr(*Images[i], '/');
+		if (!relativeName) relativeName = strrchr(*Images[i], '\\');
+		if (relativeName) relativeName++;
+		else relativeName = *Images[i];
+		Ar.Printf(
+			"    {\n"
+			"      \"uri\" : \"%s\"\n"
+			"    }%s\n",
+			relativeName,
+			i == Images.Num() - 1 ? "" : ","
+		);
+	}
+	Ar.Printf("  ],\n");
+	unguard;
+
+	// texture index maps directly to image index
+	Ar.Printf("  \"textures\" : [\n");
+	for (int i = 0; i < Images.Num(); i++)
+	{
+		Ar.Printf(
+			"    { \"source\": %d }%s\n",
+			i, i == Images.Num() - 1 ? "" : ","
+		);
+	}
+	Ar.Printf("  ],\n");
+
+	Ar.Printf("  \"materials\" : [\n");
+	for (int i = 0; i < Lod.Sections.Num(); i++)
+	{
+		const UUnrealMaterial* Mat = Lod.Sections[i].Material;
+		MaterialIndices& info = Materials[i];
+		char dummyName[64];
+		appSprintf(ARRAY_ARG(dummyName), "dummy_material_%d", i);
+		CVec3 Color = (info.DiffuseIndex < 0) ? GetMaterialDebugColor(i) : CVec3{1.f,1.f,1.f};
+		Ar.Printf(
+			"    {\n"
+			"      \"name\" : \"%s\",\n"
+			"      \"pbrMetallicRoughness\" : {\n"
+			"        \"baseColorFactor\" : [ %g, %g, %g, 1.0 ],\n",
+			Mat ? Mat->Name : dummyName,
+			Color[0], Color[1], Color[2]
+		);
+
+		if (info.MaterialIndex >= 0)
+		{
+			Ar.Printf(
+				"        \"metallicRoughnessTexture\" : {\n"
+				"          \"index\" : %d,\n"
+				"          \"texCoord\" : %d\n"
+				"        }",
+				info.MaterialIndex, 0
+			);
+		}
+		else
+		{
+			Ar.Printf(
+				"        \"metallicFactor\" : 0.5,\n"
+				"        \"roughnessFactor\" : 0.5"
+			);
+		}
+
+		if (info.DiffuseIndex >= 0)
+		{
+			Ar.Printf(
+				",\n"
+				"        \"baseColorTexture\" : {\n"
+				"          \"index\" : %d,\n"
+				"          \"texCoord\" : %d\n"
+				"        }",
+				info.DiffuseIndex, 0
+			);
+		}
+		Ar.Printf("\n      }");
+		// end of pbrMetallicRoughness
+
+		if (info.NormalIndex >= 0)
+		{
+			Ar.Printf(
+				",\n"
+				"      \"normalTexture\" : {\n"
+				"        \"index\": %d,\n"
+				"        \"texCoord\" : %d,\n"
+				"        \"scale\" : %g\n"
+
+				"      }",
+				info.NormalIndex,
+				0,
+				1.f
+			);
+		}
+
+		if (info.EmissiveIndex >= 0)
+		{
+			Ar.Printf(
+				",\n"
+				"      \"emissiveFactor\" : [ 1.0, 1.0, 1.0 ],\n"
+				"      \"emissiveTexture\" : {\n"
+				"        \"index\" : %d,\n"
+				"        \"texCoord\" : %d\n"
+				"      }",
+				info.EmissiveIndex,
+				0
+			);
+		}
+
+		if (info.OcclusionIndex >= 0)
+		{
+			Ar.Printf(
+				",\n"
+				"      \"occlusionTexture\" : {\n"
+				"        \"index\" : %d,\n"
+				"        \"texCoord\" : %d\n"
+				"      }",
+				info.OcclusionIndex,
+				0
+			);
+		}
+
+		Ar.Printf("\n    }%s\n", i == Lod.Sections.Num() - 1 ? "" : ",");
+	}
+	Ar.Printf("  ],\n");
+#endif
+	unguard;
+}
+
 static void ExportMeshLod(ExportContext& Context, const CBaseMeshLod& Lod, const CMeshVertex* Verts, FArchive& Ar, FArchive& Ar2)
 {
 	guard(ExportMeshLod);
@@ -813,12 +1018,7 @@ static void ExportMeshLod(ExportContext& Context, const CBaseMeshLod& Lod, const
 	}
 
 	// Materials
-	Ar.Printf("  \"materials\" : [\n");
-	for (int i = 0; i < Lod.Sections.Num(); i++)
-	{
-		ExportMaterial(Lod.Sections[i].Material, Ar, i, i == Lod.Sections.Num() - 1);
-	}
-	Ar.Printf("  ],\n");
+	ExportMaterials(Context, Ar, Lod);
 
 	// Meshes
 	Ar.Printf(

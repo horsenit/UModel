@@ -883,6 +883,29 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 	#undef PROC1
 	#undef PROC2
 
+	// Skip textures:
+	for (int i = 0; i < Lod.Sections.Num(); i++) {
+		MaterialIndices& info = Materials[i];
+		if (info.MaterialIndex >= 0)
+		{
+			UUnrealMaterial *Mat = info.Material;
+			// check red values (want BG images, a B&W or full color image is probably not appropriate)
+			bool hasChannel = HasChannel(info.Material, 0, 0);
+			if (hasChannel) {
+				appNotify("%s: Skipping metallicRoughness texture because of red channel...", Mat->Name);
+			} else {
+				// check alpha values
+				hasChannel = HasChannel(info.Material, 3, 255);
+				if (hasChannel)
+					appNotify("%s: Skipping metallicRoughness texture because of alpha channel...", Mat->Name);
+			}
+			if (hasChannel) {
+				info.MaterialIndex = -1;
+				info.Material = NULL;
+			}
+		}
+	}
+
 	guard(ExportMaterials::WriteImages);
 	Ar.Printf("  \"images\" : [\n" );
 	for (int i = 0; i < Images.Num(); i++)

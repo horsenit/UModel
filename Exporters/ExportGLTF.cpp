@@ -751,17 +751,27 @@ static void ExportAnimations(ExportContext& Context, FArchive& Ar)
 struct MaterialIndices
 {
 	int DiffuseIndex;
+	UUnrealMaterial *Diffuse;
 	int NormalIndex;
+	UUnrealMaterial *Normal;
 	int EmissiveIndex;
+	UUnrealMaterial *Emissive;
 	int OcclusionIndex;
+	UUnrealMaterial *Occlusion;
 	int MaterialIndex;
+	UUnrealMaterial *Material;
 
 	MaterialIndices()
 	: DiffuseIndex(-1)
+	, Diffuse(NULL)
 	, NormalIndex(-1)
+	, Normal(NULL)
 	, EmissiveIndex(-1)
+	, Emissive(NULL)
 	, OcclusionIndex(-1)
+	, Occlusion(NULL)
 	, MaterialIndex(-1)
+	, Material(NULL)
 	{}
 };
 
@@ -773,6 +783,28 @@ struct MaterialIndices
 #define EXPORT_GLTF_MATERIAL_AO			1
 #define EXPORT_GLTF_MATERIAL_ROUGHMET	1
 
+static bool HasChannel(const UUnrealMaterial *Mat, int channel, int value)
+{
+	CTextureData data;
+	if (Mat->GetTextureData(data))
+	{
+		byte *pic = data.Decompress();
+		int width = data.Mips[0].USize;
+		int height = data.Mips[0].VSize;
+		int size = width * height * 4;
+		bool success = false;
+		for (byte *src = pic; src < pic + size; src += 4)
+		{
+			if (src[channel] != value) {
+				success = true;
+				break;
+			}
+		}
+		delete pic;
+		return success;
+	}
+	return false;
+}
 
 static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMeshLod& Lod)
 {
@@ -810,7 +842,7 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 	guard(ExportMaterials::CreateFiles);
 	for (int i = 0; i < Lod.Sections.Num(); i++) {
 		Materials.AddDefaulted();
-		MaterialIndices& info = Materials[Materials.Num()-1];
+		MaterialIndices& info = Materials[i];
 		if (!Lod.Sections[i].Material)
 			continue;
 		CMaterialParams Params;
@@ -822,6 +854,7 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 			const char *filename = GetExportFileName(OriginalMesh, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->GetPackageName()); \
 			int index = Images.Add(filename); \
 			info.Arg ## Index = index; \
+			info.Arg = Params.Arg; \
 			appPrintf("Writing texture %s...\n", filename); \
 			FArchive* out = CreateExportArchive(OriginalMesh, 0, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->GetPackageName()); \
 			ExportTexturePNGArchive(Params.Arg, *out, cmd); \
@@ -888,12 +921,14 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 		char dummyName[64];
 		appSprintf(ARRAY_ARG(dummyName), "dummy_material_%d", i);
 		CVec3 Color = (info.DiffuseIndex < 0) ? GetMaterialDebugColor(i) : CVec3{1.f,1.f,1.f};
+		const char *Name = Mat ? Mat->Name : dummyName;
+
 		Ar.Printf(
 			"    {\n"
 			"      \"name\" : \"%s\",\n"
 			"      \"pbrMetallicRoughness\" : {\n"
 			"        \"baseColorFactor\" : [ %1.9g, %1.9g, %1.9g, 1.0 ],\n",
-			Mat ? Mat->Name : dummyName,
+			Name,
 			Color[0], Color[1], Color[2]
 		);
 
@@ -927,6 +962,14 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 			);
 		}
 		Ar.Printf("\n      }");
+
+		if (info.DiffuseIndex >= 0)
+		{
+			bool alpha = HasChannel(info.Diffuse, 3, 255);
+			if (alpha) {
+				Ar.Printf(",\n      \"alphaMode\" : \"BLEND\"");
+			}
+		}
 		// end of pbrMetallicRoughness
 
 		if (info.NormalIndex >= 0)

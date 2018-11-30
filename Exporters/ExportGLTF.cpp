@@ -581,6 +581,10 @@ static void ExportAnimations(ExportContext& Context, FArchive& Ar)
 		}
 	}
 
+	// Don't export empty animations array.
+	if (!Anim->Sequences.Num())
+		return;
+
 	Ar.Printf(
 		"  \"animations\" : [\n"
 	);

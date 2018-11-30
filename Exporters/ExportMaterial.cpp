@@ -46,6 +46,8 @@ void ExportMaterial(const UUnrealMaterial *Mat)
 	PROC(Emissive);
 	PROC(Cube);
 	PROC(Mask);
+	PROC(Occlusion);
+	PROC(Material);
 
 #if 0
 	// collect all textures - already exported ones and everything else

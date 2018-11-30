@@ -907,34 +907,37 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 	}
 
 	guard(ExportMaterials::WriteImages);
-	Ar.Printf("  \"images\" : [\n" );
-	for (int i = 0; i < Images.Num(); i++)
+	if (Images.Num())
 	{
-		const char *relativeName = strrchr(*Images[i], '/');
-		if (!relativeName) relativeName = strrchr(*Images[i], '\\');
-		if (relativeName) relativeName++;
-		else relativeName = *Images[i];
-		Ar.Printf(
-			"    {\n"
-			"      \"uri\" : \"%s\"\n"
-			"    }%s\n",
-			relativeName,
-			i == Images.Num() - 1 ? "" : ","
-		);
-	}
-	Ar.Printf("  ],\n");
-	unguard;
+		Ar.Printf("  \"images\" : [\n" );
+		for (int i = 0; i < Images.Num(); i++)
+		{
+			const char *relativeName = strrchr(*Images[i], '/');
+			if (!relativeName) relativeName = strrchr(*Images[i], '\\');
+			if (relativeName) relativeName++;
+			else relativeName = *Images[i];
+			Ar.Printf(
+				"    {\n"
+				"      \"uri\" : \"%s\"\n"
+				"    }%s\n",
+				relativeName,
+				i == Images.Num() - 1 ? "" : ","
+			);
+		}
+		Ar.Printf("  ],\n");
 
-	// texture index maps directly to image index
-	Ar.Printf("  \"textures\" : [\n");
-	for (int i = 0; i < Images.Num(); i++)
-	{
-		Ar.Printf(
-			"    { \"source\": %d }%s\n",
-			i, i == Images.Num() - 1 ? "" : ","
-		);
+		// texture index maps directly to image index
+		Ar.Printf("  \"textures\" : [\n");
+		for (int i = 0; i < Images.Num(); i++)
+		{
+			Ar.Printf(
+				"    { \"source\": %d }%s\n",
+				i, i == Images.Num() - 1 ? "" : ","
+			);
+		}
+		Ar.Printf("  ],\n");
 	}
-	Ar.Printf("  ],\n");
+	unguard;
 
 	Ar.Printf("  \"materials\" : [\n");
 	for (int i = 0; i < Lod.Sections.Num(); i++)

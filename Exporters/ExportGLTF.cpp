@@ -764,6 +764,10 @@ struct MaterialIndices
 	UUnrealMaterial *Occlusion;
 	int MaterialIndex;
 	UUnrealMaterial *Material;
+	int SpecularIndex;
+	UUnrealMaterial *Specular;
+	int MaskIndex;
+	UUnrealMaterial *Mask;
 
 	MaterialIndices()
 	: DiffuseIndex(-1)
@@ -776,6 +780,10 @@ struct MaterialIndices
 	, Occlusion(NULL)
 	, MaterialIndex(-1)
 	, Material(NULL)
+	, SpecularIndex(-1)
+	, Specular(NULL)
+	, MaskIndex(-1)
+	, Mask(NULL)
 	{}
 };
 
@@ -786,6 +794,8 @@ struct MaterialIndices
 #define EXPORT_GLTF_MATERIAL_EMISSIVE	1
 #define EXPORT_GLTF_MATERIAL_AO			1
 #define EXPORT_GLTF_MATERIAL_ROUGHMET	1
+#define EXPORT_GLTF_MATERIAL_SPECULAR	1
+#define EXPORT_GLTF_MATERIAL_MASK		1
 
 static bool HasChannel(const UUnrealMaterial *Mat, int channel, int value)
 {
@@ -881,6 +891,12 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 #endif
 #if EXPORT_GLTF_MATERIAL_ROUGHMET
 		PROC1(Material);
+#endif
+#if EXPORT_GLTF_MATERIAL_SPECULAR
+		PROC1(Specular);
+#endif
+#if EXPORT_GLTF_MATERIAL_MASK
+		PROC1(Mask);
 #endif
 	}
 	unguard;
@@ -1001,6 +1017,30 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 			}
 		}
 		// end of pbrMetallicRoughness
+
+		// specular extension:
+		if (info.SpecularIndex >= 0)
+		{
+			Ar.Printf(",\n"
+				"      \"extensions\" : {\n"
+				"        \"KHR_materials_pbrSpecularGlossiness\" : {\n"
+			);
+			if (info.DiffuseIndex >= 0)
+			{
+				Ar.Printf(
+				"          \"diffuseTexture\" : { \"index\" : %d },\n ",
+				info.DiffuseIndex
+				);
+			}
+			Ar.Printf(
+				// Fortnite:
+				"          \"specularFactor\" : [ 0, 0, 0 ],\n"
+				"          \"specularGlossinessTexture\" : { \"index\" : %d }\n"
+				"        }\n"
+				"      }",
+				info.SpecularIndex
+			);
+		}
 
 		if (info.NormalIndex >= 0)
 		{

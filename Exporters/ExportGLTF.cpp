@@ -752,6 +752,16 @@ static void ExportAnimations(ExportContext& Context, FArchive& Ar)
 	unguard;
 }
 
+struct ImageInfo
+{
+	FString Filename;
+	UUnrealMaterial *Material;
+
+	ImageInfo()
+	: Material(NULL)
+	{}
+};
+
 struct MaterialIndices
 {
 	int DiffuseIndex;
@@ -851,7 +861,7 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 	// Collect texture info
 
 	TArray<MaterialIndices> Materials;
-	TArray<FString> Images;
+	TArray<ImageInfo> Images;
 
 	guard(ExportMaterials::CreateFiles);
 	for (int i = 0; i < Lod.Sections.Num(); i++) {
@@ -865,11 +875,20 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 #define PROC2(Arg, cmd) \
 		if (Params.Arg) \
 		{ \
-			const char *filename = GetExportFileName(OriginalMesh, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->GetPackageName()); \
-			int index = Images.Add(filename); \
+			int index; \
+			for (index = Images.Num() - 1; index >= 0; index--) { \
+				if (Images[index].Material == Params.Arg) break; \
+			} \
+			if (index == -1) { \
+				const char *filename = GetExportFileName(OriginalMesh, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->GetPackageName()); \
+				index = Images.AddDefaulted(); \
+				ImageInfo &iinfo = Images[index]; \
+				iinfo.Filename = filename; \
+				iinfo.Material = Params.Arg; \
+				appPrintf("Writing texture %s...\n", filename); \
+			} \
 			info.Arg ## Index = index; \
 			info.Arg = Params.Arg; \
-			appPrintf("Writing texture %s...\n", filename); \
 			FArchive* out = CreateExportArchive(OriginalMesh, 0, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->GetPackageName()); \
 			ExportTexturePNGArchive(Params.Arg, *out, cmd); \
 			delete out; \
@@ -932,10 +951,12 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 		Ar.Printf("  \"images\" : [\n" );
 		for (int i = 0; i < Images.Num(); i++)
 		{
-			const char *relativeName = strrchr(*Images[i], '/');
-			if (!relativeName) relativeName = strrchr(*Images[i], '\\');
+			ImageInfo &iinfo = Images[i];
+			const char *filename = *Images[i].Filename;
+			const char *relativeName = strrchr(filename, '/');
+			if (!relativeName) relativeName = strrchr(filename, '\\');
 			if (relativeName) relativeName++;
-			else relativeName = *Images[i];
+			else relativeName = filename;
 			Ar.Printf(
 				"    {\n"
 				"      \"uri\" : \"%s\"\n"

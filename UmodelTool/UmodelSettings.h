@@ -62,6 +62,7 @@ struct CExportSettings
 
 	FString			ExportPath;
 	bool			ExportDdsTexture;
+	bool			ExportPngTexture;
 	EExportMeshFormat SkeletalMeshFormat;
 	EExportMeshFormat StaticMeshFormat;
 	bool			ExportMeshLods;

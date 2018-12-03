@@ -402,6 +402,7 @@ static void PrintUsage()
 			"    -gltf           use glTF 2.0 format for mesh\n"
 			"    -lods           export all available mesh LOD levels\n"
 			"    -dds            export textures in DDS format whenever possible\n"
+			"    -png            export textures in PNG format rather than TGA\n"
 			"    -notgacomp      disable TGA compression\n"
 			"    -nooverwrite    prevent existing files from being overwritten (better\n"
 			"                    performance)\n"
@@ -735,6 +736,7 @@ int main(int argc, char **argv)
 			OPT_NBOOL("nolightmap", GSettings.Startup.UseLightmapTexture)
 			OPT_BOOL ("sounds",  GSettings.Startup.UseSound)
 			OPT_BOOL ("dds",     GSettings.Export.ExportDdsTexture)
+			OPT_BOOL ("png",     GSettings.Export.ExportPngTexture)
 			OPT_BOOL ("notgacomp", GNoTgaCompress)
 			OPT_BOOL ("nooverwrite", GDontOverwriteFiles)
 #if HAS_UI

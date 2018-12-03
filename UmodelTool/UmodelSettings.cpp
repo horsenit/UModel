@@ -124,6 +124,7 @@ void CExportSettings::Apply()
 
 	GExportLods = ExportMeshLods;
 	GExportDDS = ExportDdsTexture;
+	GExportPNG = ExportPngTexture;
 	GUncook = SaveUncooked;
 	GUseGroups = SaveGroups;
 }

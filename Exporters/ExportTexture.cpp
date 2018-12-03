@@ -8,6 +8,7 @@
 
 #include "Exporters.h"
 
+#include "libpng/png.h"
 
 #define TGA_SAVE_BOTTOMLEFT	1
 
@@ -39,6 +40,109 @@ struct GCC_PACK tgaHdr_t
 
 bool GNoTgaCompress = false;
 bool GExportDDS = false;
+bool GExportPNG = false;
+
+struct PngWriteCtx
+{
+	FArchive *Ar;
+};
+
+static void user_write_fn(png_structp png_ptr, png_bytep data, png_size_t length)
+{
+	PngWriteCtx* ctx = (PngWriteCtx*)png_get_io_ptr(png_ptr);
+	ctx->Ar->Serialize(data, length);
+}
+
+static void user_flush_fn(png_structp png_ptr)
+{
+}
+
+static void user_error_fn(png_structp png_ptr, png_const_charp error_msg)
+{
+	appError("Error writing PNG: %s", error_msg);
+}
+
+static void user_warning_fn(png_structp png_ptr, png_const_charp warning_msg)
+{
+	appNotify("Warning writing PNG: %s", warning_msg);
+}
+
+static void* user_malloc(png_structp /*png_ptr*/, png_size_t size)
+{
+	return appMalloc(size);
+}
+
+static void user_free(png_structp /*png_ptr*/, png_voidp struct_ptr)
+{
+	appFree(struct_ptr);
+}
+
+void WritePNG(FArchive &Ar, int width, int height, byte *pic)
+{
+	guard(WritePNG);
+
+	PngWriteCtx ctx;
+	ctx.Ar = &Ar;
+
+	png_structp png_ptr = png_create_write_struct_2(PNG_LIBPNG_VER_STRING, NULL, user_error_fn, user_warning_fn, NULL, user_malloc, user_free);
+	assert(png_ptr);
+	png_infop info_ptr = png_create_info_struct(png_ptr);
+	assert(info_ptr);
+	png_set_write_fn(png_ptr, &ctx, user_write_fn, user_flush_fn);
+
+	int size = width * height;
+	int i;
+	byte *src;
+
+	// check for grayscale and alpha channel
+	bool gray = true;
+	bool alpha = false;
+	for (i = 0, src = pic; i < size; i++, src += 4)
+	{
+		if (src[0] != src[1] || src[0] != src[2])
+			gray = false;
+		if (src[3] != 255)
+			alpha = true;
+		if (!gray && alpha)
+			break;
+	}
+
+	png_set_IHDR(png_ptr, info_ptr, width, height, 8,
+		!gray ? (alpha ? PNG_COLOR_TYPE_RGB_ALPHA : PNG_COLOR_TYPE_RGB) :
+				(alpha ? PNG_COLOR_TYPE_GRAY_ALPHA : PNG_COLOR_TYPE_GRAY),
+		PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+	png_write_info(png_ptr, info_ptr);
+
+	int channels = (!gray ? (alpha ? 4 : 3) : (alpha ? 2 : 1));
+	int rowSize = width * channels;
+	png_byte *row = (png_byte*)appMalloc(rowSize);
+	for (i = 0; i < height; i++) {
+		src = pic + i * (width * 4);
+		byte *dst = row;
+		for (int x = 0; x < width; x++) {
+			if (gray) {
+				*dst = *src;
+				dst++;
+			} else {
+				*(dst+0) = *(src+0);
+				*(dst+1) = *(src+1);
+				*(dst+2) = *(src+2);
+				dst += 3;
+			}
+			if (alpha) {
+				*dst = *(src+3);
+				dst++;
+			}
+			src += 4;
+		}
+		png_write_row(png_ptr, row);
+	}
+	appFree(row);
+
+	png_write_end(png_ptr, info_ptr);
+	png_destroy_write_struct(&png_ptr, NULL);
+	unguard;
+}
 
 //?? place this function outside (cannot place to Core - using FArchive)
 
@@ -274,6 +378,39 @@ static void WriteDDS(const CTextureData &TexData, const char *Filename)
 	unguard;
 }
 
+void ExportTexturePNGArchive(const UUnrealMaterial *Tex, FArchive &Ar)
+{
+	guard(ExportTexturePNGArchive);
+
+	byte *pic = NULL;
+	int width, height;
+
+	CTextureData TexData;
+	if (Tex->GetTextureData(TexData))
+	{
+		width = TexData.Mips[0].USize;
+		height = TexData.Mips[0].VSize;
+		pic = TexData.Decompress();
+	}
+
+	// HDR not supported (?)
+	if (!pic || PixelFormatInfo[TexData.Format].Float)
+	{
+		appPrintf("WARNING: texture %s has no valid mipmaps\n", Tex->Name);
+		// produce 1x1-pixel tga
+		// should erase file?
+		width = height = 1;
+		pic = new byte[4];
+	}
+
+	WritePNG(Ar, width, height, pic);
+
+	delete pic;
+
+	Tex->ReleaseTextureData();
+
+	unguard;
+}
 
 void ExportTexture(const UUnrealMaterial *Tex)
 {
@@ -327,24 +464,34 @@ void ExportTexture(const UUnrealMaterial *Tex)
 		return;
 	}
 
-
-#if TGA_SAVE_BOTTOMLEFT
-	// flip image vertically (UnrealEd for UE2 have a bug with importing TGA_TOPLEFT images,
-	// it simply ignores orientation flags)
-	for (int i = 0; i < height / 2; i++)
+	if (!GExportPNG)
 	{
-		byte *p1 = pic + width * 4 * i;
-		byte *p2 = pic + width * 4 * (height - i - 1);
-		for (int j = 0; j < width * 4; j++)
-			Exchange(p1[j], p2[j]);
+		FArchive *Ar = CreateExportArchive(Tex, 0, "%s.tga", Tex->Name);
+		if (Ar)
+		{
+	#if TGA_SAVE_BOTTOMLEFT
+			// flip image vertically (UnrealEd for UE2 have a bug with importing TGA_TOPLEFT images,
+			// it simply ignores orientation flags)
+			for (int i = 0; i < height / 2; i++)
+			{
+				byte *p1 = pic + width * 4 * i;
+				byte *p2 = pic + width * 4 * (height - i - 1);
+				for (int j = 0; j < width * 4; j++)
+					Exchange(p1[j], p2[j]);
+			}
+	#endif
+			WriteTGA(*Ar, width, height, pic);
+			delete Ar;
+		}
 	}
-#endif
-
-	FArchive *Ar = CreateExportArchive(Tex, 0, "%s.tga", Tex->Name);
-	if (Ar)
+	else
 	{
-		WriteTGA(*Ar, width, height, pic);
-		delete Ar;
+		FArchive *Ar = CreateExportArchive(Tex, 0, "%s.png", Tex->Name);
+		if (Ar)
+		{
+			WritePNG(*Ar, width, height, pic);
+			delete Ar;
+		}
 	}
 
 	delete pic;

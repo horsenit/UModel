@@ -37,6 +37,7 @@ extern bool GExportScripts;
 extern bool GExportLods;
 extern bool GNoTgaCompress;
 extern bool GExportDDS;
+extern bool GExportPNG;
 extern bool GUncook;
 extern bool GUseGroups;
 extern bool GDontOverwriteFiles;
@@ -83,5 +84,7 @@ void ExportFaceFXAsset(const UFaceFXAsset *Fx);
 
 void WriteTGA(FArchive &Ar, int width, int height, byte *pic);
 
+// Write PNG to FArchive
+void ExportTexturePNGArchive(const UUnrealMaterial *Tex, FArchive &Ar);
 
 #endif // __EXPORT_H__

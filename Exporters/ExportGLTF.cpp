@@ -980,6 +980,8 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 	}
 	unguard;
 
+	bool usedSpecularExtension = false;
+
 	Ar.Printf("  \"materials\" : [\n");
 	for (int i = 0; i < Lod.Sections.Num(); i++)
 	{
@@ -1042,6 +1044,7 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 		// specular extension:
 		if (info.SpecularIndex >= 0)
 		{
+			usedSpecularExtension = true;
 			Ar.Printf(",\n"
 				"      \"extensions\" : {\n"
 				"        \"KHR_materials_pbrSpecularGlossiness\" : {\n"
@@ -1109,6 +1112,11 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 		Ar.Printf("\n    }%s\n", i == Lod.Sections.Num() - 1 ? "" : ",");
 	}
 	Ar.Printf("  ],\n");
+
+	if (usedSpecularExtension)
+	{
+		Ar.Printf("  \"extensionsUsed\" : [ \"KHR_materials_pbrSpecularGlossiness\" ],\n");
+	}
 #endif
 	unguard;
 }

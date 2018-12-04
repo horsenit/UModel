@@ -871,7 +871,6 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 			continue;
 		CMaterialParams Params;
 		Lod.Sections[i].Material->GetParams(Params);
-
 #define PROC2(Arg, cmd) \
 		if (Params.Arg) \
 		{ \
@@ -880,7 +879,7 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 				if (Images[index].Material == Params.Arg) break; \
 			} \
 			if (index == -1) { \
-				const char *filename = GetExportFileName(OriginalMesh, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->GetPackageName()); \
+				const char *filename = GetExportFileName(OriginalMesh, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->Name); \
 				index = Images.AddDefaulted(); \
 				ImageInfo &iinfo = Images[index]; \
 				iinfo.Filename = filename; \
@@ -889,7 +888,7 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 			} \
 			info.Arg ## Index = index; \
 			info.Arg = Params.Arg; \
-			FArchive* out = CreateExportArchive(OriginalMesh, 0, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->GetPackageName()); \
+			FArchive* out = CreateExportArchive(OriginalMesh, 0, "%s_export/%s.png", OriginalMesh->Name, Params.Arg->Name); \
 			ExportTexturePNGArchive(Params.Arg, *out, cmd); \
 			delete out; \
 		}

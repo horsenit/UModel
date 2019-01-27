@@ -1,5 +1,5 @@
 // Simple UI library.
-// Copyright (C) 2018 Konstantin Nosov
+// Copyright (C) 2019 Konstantin Nosov
 // Licensed under the BSD license. See LICENSE.txt file in the project root for full license information.
 
 #ifndef __BASE_DIALOG_H__
@@ -522,6 +522,9 @@ class UICombobox : public UIElement
 	{
 		FString Text;
 		int     Value;
+
+		ComboboxItem()
+		{}
 
 		ComboboxItem(const char* text, int value)
 		: Text(text)

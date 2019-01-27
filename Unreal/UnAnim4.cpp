@@ -211,6 +211,16 @@ void USkeleton::Serialize(FArchive &Ar)
 		Ar << SmartNames;
 	unguard;
 
+	if (FAnimObjectVersion::Get(Ar) >= FAnimObjectVersion::StoreMarkerNamesOnSkeleton)
+	{
+		FStripDataFlags StripFlags(Ar);
+		if (!StripFlags.IsEditorDataStripped())
+		{
+			TArray<FName> ExistingMarkerNames;
+			Ar << ExistingMarkerNames;
+		}
+	}
+
 	unguard;
 }
 
@@ -572,7 +582,7 @@ void USkeleton::ConvertAnims(UAnimSequence4* Seq)
 				{
 					switch (KeyFormat)
 					{
-//					case ACF_None:
+					case ACF_None:
 					case ACF_Float96NoW:
 						{
 							FVector v;
@@ -655,7 +665,7 @@ void USkeleton::ConvertAnims(UAnimSequence4* Seq)
 				{
 					switch (KeyFormat)
 					{
-//					TR (ACF_None, FQuat)
+					case ACF_None:
 					case ACF_Float96NoW:
 						{
 							FQuatFloat96NoW q;
@@ -885,12 +895,16 @@ void UAnimSequence4::Serialize(FArchive& Ar)
 			Ar << CompressedTrackOffsets;
 			Ar << CompressedScaleOffsets;
 
-/*??		if (Ar.Game >= GAME_UE4(21)) -- not in Fortnite yet
+			if (Ar.Game >= GAME_UE4(21))
 			{
-///DUMP_ARC_BYTES(Ar, 64, "CompressedStream-Segments");
 				// UE4.21+ - added compressed segments
 				Ar << CompressedSegments;
-			} */
+				if (CompressedSegments.Num())
+				{
+					//?? TODO: CompressedSegments
+					appNotify("animation has CompressedSegments!");
+				}
+			}
 
 			Ar << CompressedTrackToSkeletonMapTable;
 			Ar << CompressedCurveData;
@@ -901,11 +915,10 @@ void UAnimSequence4::Serialize(FArchive& Ar)
 				int32 CompressedRawDataSize;
 				Ar << CompressedRawDataSize;
 			}
-
-			//!! temporary code: it's not in UE4 code base, however some extra integer exists in recent Fortnite at this place
-			if (Ar.Game >= GAME_UE4(21))
+			if (Ar.Game >= GAME_UE4(22))
 			{
-				Ar.Seek(Ar.Tell()+4);
+				int32 CompressedNumFrames;
+				Ar << CompressedNumFrames;
 			}
 
 			// compressed data

@@ -1235,19 +1235,22 @@ fn ImportPskFile filename skelOnly:false =
 
 	axProfilePoint "Base import" debug:true
 
-	newMat = multiMaterial numsubs:numMaterials
+	-- import materials
 	if g_skelOnly then numMaterials = 0		-- do not load materials for this option
+	-- setup path to materials and textures
+	local texDir
+	if g_texDir != "" then
+	(
+		texDir = g_texDir
+	)
+	else
+	(
+		texDir = getFilenamePath filename
+	)
+	-- create materials
+	newMat = multiMaterial numsubs:numMaterials
 	for i = 1 to numMaterials do
 	(
-		local texDir
-		if g_texDir != "" then
-		(
-			texDir = g_texDir
-		)
-		else
-		(
-			texDir = getFilenamePath filename
-		)
 		local subMat = axImportMaterial Materials[i].MaterialName texDir
 		newMat.materialList[i] = subMat
 		showTextureMap subMat true
@@ -2021,7 +2024,7 @@ rollout axInfoRollout "ActorX Importer"
 (
 	-- copyright label
 	label     Lbl1 "Version 1.36"
-	label     Lbl2 "\xA9 2009-2018 Konstantin Nosov (Gildor)"
+	label     Lbl2 "\xA9 2009-2019 Konstantin Nosov (Gildor)"
 	hyperlink Lbl3 "http://www.gildor.org/" \
 					address:"http://www.gildor.org/projects/unactorx" align:#center \
 					color:black hovercolor:blue visitedcolor:black

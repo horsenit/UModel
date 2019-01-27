@@ -1,5 +1,5 @@
 // Simple UI library.
-// Copyright (C) 2018 Konstantin Nosov
+// Copyright (C) 2019 Konstantin Nosov
 // Licensed under the BSD license. See LICENSE.txt file in the project root for full license information.
 
 #ifndef __UN_CORE_H__
@@ -208,6 +208,17 @@ public:
 		return A.str != B;
 	}
 };
+
+// Allow use of std::string as FString parameter
+FORCEINLINE FString* CastString(std::string* str)
+{
+	return reinterpret_cast<FString*>(str);
+}
+
+FORCEINLINE FString& CastString(std::string& str)
+{
+	return reinterpret_cast<FString&>(str);
+}
 
 // No TStaticArray FStaticString
 

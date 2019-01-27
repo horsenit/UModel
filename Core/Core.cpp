@@ -6,6 +6,10 @@
 
 #include <sys/stat.h>				// for mkdir(), stat()
 
+#if !_WIN32
+#include <time.h>					// for Linux version of GetTickCount()
+#endif
+
 #if VSTUDIO_INTEGRATION
 #define WIN32_LEAN_AND_MEAN			// exclude rarely-used services from windown headers
 #define _WIN32_WINDOWS 0x0500		// for IsDebuggerPresent()
@@ -32,7 +36,7 @@ void appPrintf(const char *fmt, ...)
 	char buf[4096];
 	int len = vsnprintf(ARRAY_ARG(buf), fmt, argptr);
 	va_end(argptr);
-	assert(len >= 0 && len < ARRAY_COUNT(buf) - 1);
+	if (len < 0 || len >= ARRAY_COUNT(buf) - 1) appError("appPrintf: buffer overflow");
 
 	fwrite(buf, len, 1, stdout);
 	if (GLogFile) fwrite(buf, len, 1, GLogFile);
@@ -57,7 +61,7 @@ void appError(const char *fmt, ...)
 	char buf[4096];
 	int len = vsnprintf(ARRAY_ARG(buf), fmt, argptr);
 	va_end(argptr);
-	assert(len >= 0 && len < ARRAY_COUNT(buf) - 1);
+	if (len < 0 || len >= ARRAY_COUNT(buf) - 1) appError("appError: buffer overflow");
 
 	GIsSwError = true;
 
@@ -97,7 +101,7 @@ void appNotify(const char *fmt, ...)
 	char buf[4096];
 	int len = vsnprintf(ARRAY_ARG(buf), fmt, argptr);
 	va_end(argptr);
-	assert(len >= 0 && len < ARRAY_COUNT(buf) - 1);
+	if (len < 0 || len >= ARRAY_COUNT(buf) - 1) appError("appNotify: buffer overflow");
 
 	fflush(stdout);
 
@@ -533,3 +537,15 @@ unsigned appGetFileType(const char *filename)
 		return FS_FILE;
 	return 0;						// just in case ... (may be, win32 have other file types?)
 }
+
+#if !_WIN32
+
+// POSIX version of GetTickCount()
+unsigned long GetTickCount()
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64)(ts.tv_nsec / 1000000) + ((uint64)ts.tv_sec * 1000ull);
+}
+
+#endif // _WIN32

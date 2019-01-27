@@ -107,6 +107,7 @@ void WritePNG(FArchive &Ar, int width, int height, byte *pic)
 			break;
 	}
 
+	png_set_compression_level(png_ptr, 4);
 	png_set_IHDR(png_ptr, info_ptr, width, height, 8,
 		!gray ? (alpha ? PNG_COLOR_TYPE_RGB_ALPHA : PNG_COLOR_TYPE_RGB) :
 				(alpha ? PNG_COLOR_TYPE_GRAY_ALPHA : PNG_COLOR_TYPE_GRAY),

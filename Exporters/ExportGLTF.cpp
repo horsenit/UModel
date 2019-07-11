@@ -12,7 +12,7 @@
 #include "Exporters.h"
 #include "../UmodelTool/Version.h"
 
-#define FIRST_BONE_NODE		1
+#define FIRST_BONE_NODE		2
 
 //?? TODO: remove this function
 static CVec3 GetMaterialDebugColor(int Index)
@@ -443,10 +443,13 @@ static void ExportSkinData(ExportContext& Context, const CSkelMeshLod& Lod, FArc
 		"  \"nodes\" : [\n"
 		"    {\n"
 		"      \"name\" : \"%s\",\n"
+		"      \"children\" : [ 1, 2 ]\n"
+		"    },\n"
+		"    {\n"
 		"      \"mesh\" : 0,\n"
-		"      \"skin\" : 0,\n"
-		"      \"children\" : [ 1 ]\n"
-		"    },\n",
+		"      \"skin\" : 0\n"
+		"    },\n"
+		,
 		Context.MeshName);
 
 	TArray<CCoords> BoneCoords;

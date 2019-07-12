@@ -14,6 +14,9 @@
 
 #define FIRST_BONE_NODE		2
 
+#define FLOAT_WEIGHTS		1 // Overcome the shortcomings of other software (that seems to have problems dealing with int weights)
+#define ACCESSOR_NAMES		0
+
 //?? TODO: remove this function
 static CVec3 GetMaterialDebugColor(int Index)
 {
@@ -80,6 +83,9 @@ struct BufferData
 
 	FString BoundsMin;
 	FString BoundsMax;
+#if ACCESSOR_NAMES
+	FString Name;
+#endif
 
 	BufferData()
 	: Data(NULL)
@@ -91,8 +97,11 @@ struct BufferData
 		if (Data) appFree(Data);
 	}
 
-	void Setup(int InCount, const char* InType, int InComponentType, int InItemSize, bool InNormalized = false)
+	void Setup(const FString& InName, int InCount, const char* InType, int InComponentType, int InItemSize, bool InNormalized = false)
 	{
+#if ACCESSOR_NAMES
+		Name = InName;
+#endif
 		Count = InCount;
 		Type = InType;
 		bNormalized = InNormalized;
@@ -227,21 +236,25 @@ static void ExportSection(ExportContext& Context, const CBaseMeshLod& Lod, const
 	BufferData* BonesBuf = NULL;
 	BufferData* WeightsBuf = NULL;
 
-	PositionBuf.Setup(numLocalVerts, "VEC3", BufferData::FLOAT, sizeof(CVec3));
-	NormalBuf.Setup(numLocalVerts, "VEC3", BufferData::FLOAT, sizeof(CVec3));
-	TangentBuf.Setup(numLocalVerts, "VEC4", BufferData::FLOAT, sizeof(CVec4));
+	PositionBuf.Setup("PositionBuf", numLocalVerts, "VEC3", BufferData::FLOAT, sizeof(CVec3));
+	NormalBuf.Setup("NormalBuf", numLocalVerts, "VEC3", BufferData::FLOAT, sizeof(CVec3));
+	TangentBuf.Setup("TangentBuf", numLocalVerts, "VEC4", BufferData::FLOAT, sizeof(CVec4));
 	for (int i = 0; i < Lod.NumTexCoords; i++)
 	{
 		UVBuf[i] = &Context.Data[UVBufIndex[i]];
-		UVBuf[i]->Setup(numLocalVerts, "VEC2", BufferData::FLOAT, sizeof(CMeshUVFloat));
+		UVBuf[i]->Setup("UVBuf", numLocalVerts, "VEC2", BufferData::FLOAT, sizeof(CMeshUVFloat));
 	}
 
 	if (Context.IsSkeletal())
 	{
 		BonesBuf = &Context.Data[BonesBufIndex];
 		WeightsBuf = &Context.Data[WeightsBufIndex];
-		BonesBuf->Setup(numLocalVerts, "VEC4", BufferData::UNSIGNED_SHORT, sizeof(uint16)*4);
-		WeightsBuf->Setup(numLocalVerts, "VEC4", BufferData::UNSIGNED_BYTE, sizeof(uint32), /*InNormalized=*/ true);
+		BonesBuf->Setup("BonesBuf", numLocalVerts, "VEC4", BufferData::UNSIGNED_SHORT, sizeof(uint16)*4);
+#if	FLOAT_WEIGHTS
+		WeightsBuf->Setup("WeightsBuf", numLocalVerts, "VEC4", BufferData::FLOAT, sizeof(CVec4));
+#else
+		WeightsBuf->Setup("WeightsBuf", numLocalVerts, "VEC4", BufferData::UNSIGNED_BYTE, sizeof(uint32), true);
+#endif
 	}
 
 	// Prepare and build indices
@@ -255,7 +268,7 @@ static void ExportSection(ExportContext& Context, const CBaseMeshLod& Lod, const
 
 	if (numLocalVerts <= 65536)
 	{
-		IndexBuf.Setup(numLocalIndices, "SCALAR", BufferData::UNSIGNED_SHORT, sizeof(uint16));
+		IndexBuf.Setup("IndexBuf", numLocalIndices, "SCALAR", BufferData::UNSIGNED_SHORT, sizeof(uint16));
 		for (int idx = 0; idx < numLocalIndices; idx++)
 		{
 			IndexBuf.Put<uint16>(indexRemap[localIndices[idx]]);
@@ -263,7 +276,7 @@ static void ExportSection(ExportContext& Context, const CBaseMeshLod& Lod, const
 	}
 	else
 	{
-		IndexBuf.Setup(numLocalIndices, "SCALAR", BufferData::UNSIGNED_INT, sizeof(uint32));
+		IndexBuf.Setup("IndexBuf", numLocalIndices, "SCALAR", BufferData::UNSIGNED_INT, sizeof(uint32));
 		for (int idx = 0; idx < numLocalIndices; idx++)
 		{
 			IndexBuf.Put<uint32>(indexRemap[localIndices[idx]]);
@@ -351,7 +364,13 @@ static void ExportSection(ExportContext& Context, const CBaseMeshLod& Lod, const
 			}
 
 			BonesBuf->Put(*(uint64*)&Bones);
+#if	FLOAT_WEIGHTS
+			CVec4 fWeights;
+			V.UnpackWeights(fWeights);
+			WeightsBuf->Put(fWeights);
+#else
 			WeightsBuf->Put(V.PackedWeights);
+#endif
 		}
 	}
 
@@ -437,7 +456,7 @@ static void ExportSkinData(ExportContext& Context, const CSkelMeshLod& Lod, FArc
 
 	int MatrixBufIndex = Context.Data.AddZeroed();
 	BufferData& MatrixBuf = Context.Data[MatrixBufIndex];
-	MatrixBuf.Setup(numBones, "MAT4", BufferData::FLOAT, sizeof(CMat4));
+	MatrixBuf.Setup("MatrixBuf", numBones, "MAT4", BufferData::FLOAT, sizeof(CMat4));
 
 	Ar.Printf(
 		"  \"nodes\" : [\n"
@@ -446,6 +465,7 @@ static void ExportSkinData(ExportContext& Context, const CSkelMeshLod& Lod, FArc
 		"      \"children\" : [ 1, 2 ]\n"
 		"    },\n"
 		"    {\n"
+		"      \"name\" : \"mesh\",\n"
 		"      \"mesh\" : 0,\n"
 		"      \"skin\" : 0\n"
 		"    },\n"
@@ -676,7 +696,7 @@ static void ExportAnimations(ExportContext& Context, FArchive& Ar)
 
 			int TimeBufIndex = Context.Data.AddZeroed();
 			BufferData& TimeBuf = Context.Data[TimeBufIndex];
-			TimeBuf.Setup(NumKeys, "SCALAR", BufferData::FLOAT, sizeof(float));
+			TimeBuf.Setup("TimeBuf", NumKeys, "SCALAR", BufferData::FLOAT, sizeof(float));
 
 			float RateScale = 1.0f / Seq.Rate;
 			float LastFrameTime = 0;
@@ -712,7 +732,7 @@ static void ExportAnimations(ExportContext& Context, FArchive& Ar)
 			if (Sampler.Type == AnimSampler::TRANSLATION)
 			{
 				// Translation track
-				DataBuf.Setup(NumKeys, "VEC3", BufferData::FLOAT, sizeof(CVec3));
+				DataBuf.Setup("DataBuf", NumKeys, "VEC3", BufferData::FLOAT, sizeof(CVec3));
 				for (int i = 0; i < NumKeys; i++)
 				{
 					CVec3 Pos = Sampler.Track->KeyPos[i];
@@ -723,7 +743,7 @@ static void ExportAnimations(ExportContext& Context, FArchive& Ar)
 			else
 			{
 				// Rotation track
-				DataBuf.Setup(NumKeys, "VEC4", BufferData::FLOAT, sizeof(CQuat));
+				DataBuf.Setup("DataBuf", NumKeys, "VEC4", BufferData::FLOAT, sizeof(CQuat));
 				for (int i = 0; i < NumKeys; i++)
 				{
 					CQuat Rot = Sampler.Track->KeyQuat[i];
@@ -1016,8 +1036,8 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 		else
 		{
 			Ar.Printf(
-				"        \"metallicFactor\" : 0.5,\n"
-				"        \"roughnessFactor\" : 0.5"
+				"        \"metallicFactor\" : 1,\n"
+				"        \"roughnessFactor\" : 1"
 			);
 		}
 
@@ -1246,6 +1266,12 @@ static void ExportMeshLod(ExportContext& Context, const CBaseMeshLod& Lod, const
 			"      \"bufferView\" : %d,\n",
 			i
 		);
+#if	ACCESSOR_NAMES
+		Ar.Printf(
+			"      \"name\" : \"%s\",\n",
+			B.Name
+		);
+#endif
 		if (B.bNormalized)
 		{
 			Ar.Printf("      \"normalized\" : true,\n");

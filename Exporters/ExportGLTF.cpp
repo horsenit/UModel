@@ -1011,16 +1011,13 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 		MaterialIndices& info = Materials[i];
 		char dummyName[64];
 		appSprintf(ARRAY_ARG(dummyName), "dummy_material_%d", i);
-		CVec3 Color = (info.DiffuseIndex < 0) ? GetMaterialDebugColor(i) : CVec3{1.f,1.f,1.f};
 		const char *Name = Mat ? Mat->Name : dummyName;
 
 		Ar.Printf(
 			"    {\n"
 			"      \"name\" : \"%s\",\n"
-			"      \"pbrMetallicRoughness\" : {\n"
-			"        \"baseColorFactor\" : [ %1.9g, %1.9g, %1.9g, 1.0 ],\n",
-			Name,
-			Color[0], Color[1], Color[2]
+			"      \"pbrMetallicRoughness\" : {\n",
+			Name
 		);
 
 		if (info.MaterialIndex >= 0)
@@ -1052,6 +1049,16 @@ static void ExportMaterials(ExportContext& Context, FArchive& Ar, const CBaseMes
 				info.DiffuseIndex, 0
 			);
 		}
+		else
+		{
+			CVec3 Color = GetMaterialDebugColor(i);
+			Ar.Printf(
+				",\n"
+				"        \"baseColorFactor\" : [ %1.9g, %1.9g, %1.9g, 1.0 ]\n",
+				Color[0], Color[1], Color[2]
+			);
+		}
+
 		Ar.Printf("\n      }");
 
 		if (info.DiffuseIndex >= 0)

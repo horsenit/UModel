@@ -136,7 +136,7 @@ public:
 	:	Info(info)
 	{
 		guard(FGears4BundleFile::Constructor)
-		Reader = appCreateFileReader(Info->Container);
+		Reader = Info->Container->CreateReader();
 		assert(Reader);
 		Reader->SetStopper(Info->Position + Info->Size);
 
@@ -213,7 +213,7 @@ public:
 			return false;
 		}
 
-		assert(FileInfos.Num() + 1 < FileInfos.Max()); // if we'll resize array, HashNext will be trushed
+		assert(FileInfos.Num() + 1 < FileInfos.Max()); // if we'll resize array, HashNext will be trashed
 		FGears4BundledInfo* info = new (FileInfos) FGears4BundledInfo;
 
 		info->Name = appStrdupPool(filename);
@@ -332,9 +332,9 @@ void LoadGears4Manifest(const CGameFileInfo* info)
 {
 	guard(LoadGears4Manifest);
 
-	appPrintf("Loading Gears4 manifest file %s\n", info->RelativeName);
+	appPrintf("Loading Gears4 manifest file %s\n", *info->GetRelativeName());
 
-	FArchive* loader = appCreateFileReader(info);
+	FArchive* loader = info->CreateReader();
 	assert(loader);
 	loader->Game = GAME_Gears4;
 

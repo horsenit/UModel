@@ -202,10 +202,12 @@ void UObject::EndLoad()
 		LoadedObjects[i]->PostLoad();
 	unguardf("%s", LoadedObjects[i]->Name);
 	// cleanup
+	guard(Cleanup);
 	GObjLoaded.Empty();
 	GObjBeginLoadCount--;		// decrement after loading
 	appSetNotifyHeader(NULL);
 	assert(GObjBeginLoadCount == 0);
+	unguard;
 
 	// close all opened file handles
 	UnPackage::CloseAllReaders();
@@ -406,7 +408,7 @@ struct FPropertyTag
 			Ar << UseObject;
 			if (UseObject)
 			{
-				// This code was bever executed in my tests
+				// This code was never executed in my tests
 				Ar << Object;
 				if (!Object)
 				{

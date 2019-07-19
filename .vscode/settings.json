@@ -1,0 +1,48 @@
+{
+    "files.exclude": {
+        "umodel*" : true,
+        "*.{exe,dll,bat}": true,
+        "package*.sh": true,
+        "src-arc.sh": true,
+        "**/.vs": true,
+        "**/bak": true,
+        "**/data": true,
+        "**/Docs": true,
+        "**/makefile-*": true,
+        "**/obj": true,
+        "**/Tools/{M,P,T,Umd,UT,unpack}*": true,
+        "**/UI/stl-stub": true,
+        "**/UmodelExport": true,
+        "**/UmodelSaved": true,
+        "**/Screenshots": true
+    },
+    "files.associations": {
+        "*.ush": "hlsl",
+        "*.project": "perl"
+    },
+    "files.trimTrailingWhitespace": true,
+    "cSpell.words": [
+		"FCOLOR",
+		"FGPU",
+		"FQUAT",
+		"FROTATOR",
+		"FVECTOR",
+		"LODs",
+		"SKEL",
+		"SKELMESH",
+		"Strncpyz",
+		"Tris",
+		"UMODEL",
+		"coord",
+		"kdop",
+		"maxs",
+		"tex",
+		"uasset",
+		"ubulk",
+		"uexp",
+		"unguardf",
+		"unversioned",
+		"recurse",
+		"uv"
+	]
+}

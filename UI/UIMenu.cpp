@@ -295,7 +295,7 @@ void UIMenuItem::FillMenuItems(HMENU parentMenu, int& nextId, int& position)
 			break;
 
 		default:
-			appError("Unkwnown item type: %d (label=%s)", item->Type, *item->Label);
+			appError("Unknown item type: %d (label=%s)", item->Type, *item->Label);
 		}
 	}
 
@@ -341,7 +341,7 @@ bool UIMenuItem::HandleCommand(int id)
 				break;
 
 			default:
-				appError("Unkwnown item type: %d (label=%s)", item->Type, *item->Label);
+				appError("Unknown item type: %d (label=%s)", item->Type, *item->Label);
 			}
 			return true;
 		}
@@ -441,7 +441,7 @@ void UIMenuItem::Update()
 			guard(RadioGroup);
 			bool checked = (button->iValue == *(int*)pValue);
 			CheckMenuItem(hMenu, button->Id, MF_BYCOMMAND | (checked ? MF_CHECKED : 0));
-			unguard("\"%s\"", *button->Label);
+			unguardf("\"%s\"", *button->Label);
 		}
 		break;
 	case MI_Submenu:

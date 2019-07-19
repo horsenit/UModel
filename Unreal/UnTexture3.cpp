@@ -489,9 +489,9 @@ static void ReduxReadRtcData()
 		}
 		NewReduxSystem = true;
 	}
-	reduxDataAr = appCreateFileReader(dataFile);
+	reduxDataAr = dataFile->CreateReader();
 
-	FArchive *Ar = appCreateFileReader(hdrFile);
+	FArchive *Ar = hdrFile->CreateReader();
 	Ar->Game  = GAME_Tribes4;
 	Ar->ArVer = 805;			// just in case
 	if (NewReduxSystem)
@@ -604,7 +604,7 @@ static void ReadMarvelHeroesTFCManifest()
 		appPrintf("WARNING: unable to find %s\n", "TextureFileCacheManifest.bin");
 		return;
 	}
-	FArchive *Ar = appCreateFileReader(fileInfo);
+	FArchive *Ar = fileInfo->CreateReader();
 	Ar->Game  = GAME_MarvelHeroes;
 	Ar->ArVer = 859;			// just in case
 	Ar->ArLicenseeVer = 3;
@@ -727,9 +727,11 @@ bool UTexture2D::LoadBulkTexture(const TArray<FTexture2DMipMap> &MipsArray, int 
 
 	assert(bulkFile);									// missing file is processed above
 	if (verbose)
-		appPrintf("Reading %s mip level %d (%dx%d) from %s\n", Name, MipIndex, Mip.SizeX, Mip.SizeY, bulkFile->RelativeName);
+	{
+		appPrintf("Reading %s mip level %d (%dx%d) from %s\n", Name, MipIndex, Mip.SizeX, Mip.SizeY, *bulkFile->GetRelativeName());
+	}
 
-	FArchive *Ar = appCreateFileReader(bulkFile);
+	FArchive *Ar = bulkFile->CreateReader();
 	Ar->SetupFrom(*Package);
 	FByteBulkData *Bulk = const_cast<FByteBulkData*>(&Mip.Data);
 	if (Bulk->BulkDataOffsetInFile < 0)
@@ -762,7 +764,7 @@ bool UTexture2D::LoadBulkTexture(const TArray<FTexture2DMipMap> &MipsArray, int 
 	delete Ar;
 	return true;
 
-	unguardf("File=%s Mip=%d", bulkFile ? bulkFile->RelativeName : "none", MipIndex);
+	unguardf("File=%s Mip=%d", bulkFile ? *bulkFile->GetRelativeName() : "none", MipIndex);
 }
 
 
@@ -779,7 +781,7 @@ void UTexture2D::ReleaseTextureData() const
 	{
 		const FTexture2DMipMap &Mip = (*MipsArray)[n];
 		const FByteBulkData &Bulk = Mip.Data;
-		if (Bulk.BulkData && (Bulk.BulkDataFlags & BULKDATA_StoreInSeparateFile))
+		if (Bulk.CanReloadBulk())
 			const_cast<FByteBulkData*>(&Bulk)->ReleaseData();
 	}
 
@@ -980,7 +982,8 @@ bool UTexture2D::GetTextureData(CTextureData &TexData) const
 
 	if (intFormat == TPF_UNKNOWN)
 	{
-		appNotify("Unknown texture format: %s (%d)", TexData.OriginalFormatName, Format);
+		if (SourceArt.BulkData == NULL && Format != PF_Unknown) // do not show warning when browsing source packages
+			appPrintf("Unknown texture format: %s (%d)\n", TexData.OriginalFormatName, Format);
 		return false;
 	}
 

@@ -6,7 +6,8 @@ class UIErrorDialog : public UIBaseDialog
 public:
 	void Show()
 	{
-		ShowModal("Fatal Error", 475, -1);
+		SetResizeable();
+		ShowModal("Fatal Error", 530, 200);
 	}
 
 	void InitUI()
@@ -30,6 +31,7 @@ public:
 		[
 			NewControl(UIGroup, GROUP_NO_BORDER|GROUP_HORIZONTAL_LAYOUT)
 			.SetWidth(EncodeWidth(1.0f))
+			.SetHeight(EncodeWidth(1.0f))
 			[
 				NewControl(UIBitmap)
 				.SetWidth(48)
@@ -40,12 +42,13 @@ public:
 				.SetWidth(EncodeWidth(1.0f))
 				[
 					NewControl(UILabel, message)
-					.SetHeight(-1)		//!! auto-size label height; use AutoVSize API?
+//					.SetHeight(-1)		//!! auto-size label height; use AutoVSize API?
+					.SetHeight(28)		// two lines of text
 					+ NewControl(UISpacer, 16)
 					+ NewControl(UILabel, "Call stack:")
 					+ NewControl(UISpacer)
 					+ NewControl(UITextEdit, log)
-					.SetHeight(100)		//?? try to auto-size it
+					.SetHeight(-1)		//?? old value: 100
 					.SetMultiline()
 					.SetReadOnly()
 					.SetWantFocus(false)
@@ -59,7 +62,7 @@ public:
 					+ NewControl(UIButton, "Copy")
 					.SetWidth(80)
 					.SetCallback(BIND_STATIC(&UIErrorDialog::CopyToClipboard))
-//					.SetCallback(BIND_STATIC([]() { appCopyTextToClipboard(GErrorHistory); })) - error in VS2013
+//					.SetCallback(BIND_LAMBDA([]() { appCopyTextToClipboard(GErrorHistory); })) - error in VS2013
 				]
 			]
 		];

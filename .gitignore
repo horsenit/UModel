@@ -11,6 +11,8 @@ UmodelTool/Version.h
 Tools/**/makefile-*
 
 # Other ignores
+Docs/cmdline.cfg
+Docs/fortnite.txt
 Tools/MaxActorXImport/ActorXImporter.ini
 Tools/UT2down/
 
@@ -23,10 +25,11 @@ umodel.cfg
 
 # Executable files and pdb
 umodel.pdb
+SDL2.dll
 .vs/
 Tools/**/*.exe
 Tools/**/*.pdb
-Docs/ObjectVersion.h
+*todo.md
 
 # UI_Dev
 Tools/UITest/vs/Debug/

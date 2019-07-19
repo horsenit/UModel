@@ -359,9 +359,6 @@ const GameInfo GListOfGames[] = {
 #	if ARK
 		G("Ark: Survival Evolved", ark, GAME_Ark),
 #	endif
-#	if FRIDAY13
-		G("Friday the 13th: The Game", friday13, GAME_Friday13),
-#	endif
 #	if TEKKEN7
 		G("Tekken 7", tekken7, GAME_Tekken7),
 #	endif
@@ -377,8 +374,17 @@ const GameInfo GListOfGames[] = {
 #	if PARAGON
 		G("Paragon", paragon, GAME_Paragon),
 #	endif
+#	if UT4
+		G("Unreal Tournament 4", ut4, GAME_UT4),
+#	endif
 #	if HIT
 		G("Heroes of Incredible Tales", hit, GAME_HIT),
+#	endif
+#	if NGB
+		G("New Gundam Breaker", ngb, GAME_NGB),
+#	endif
+#	if LIS2
+		G("Life is Strange 2", lis2, GAME_LIS2),
 #	endif
 #endif // UNREAL4
 
@@ -912,7 +918,7 @@ static const int ue4Versions[] =
 	VER_UE4_5, VER_UE4_6, VER_UE4_7, VER_UE4_8, VER_UE4_9,
 	VER_UE4_10, VER_UE4_11, VER_UE4_12, VER_UE4_13, VER_UE4_14,
 	VER_UE4_15, VER_UE4_16, VER_UE4_17, VER_UE4_18, VER_UE4_19,
-	VER_UE4_20, VER_UE4_21, VER_UE4_22
+	VER_UE4_20, VER_UE4_21, VER_UE4_22, VER_UE4_23
 	// NEW_ENGINE_VERSION
 };
 
@@ -1002,5 +1008,5 @@ void FArchive::OverrideVersion()
 
 end_override:
 	if ((ArVer != OldVer || ArLicenseeVer != OldLVer) && Game < GAME_UE4_BASE)
-		appPrintf("Overrided version %d/%d -> %d/%d\n", OldVer, OldLVer, ArVer, ArLicenseeVer);
+		appPrintf("Overriden version %d/%d -> %d/%d\n", OldVer, OldLVer, ArVer, ArLicenseeVer);
 }

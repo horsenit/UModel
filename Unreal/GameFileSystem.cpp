@@ -157,11 +157,11 @@ static int            GStartupPackageInfoWeight = 0;
 #endif
 
 
-static int GetHashForFileName(const char* FileName, bool stripExtension)
+static int GetHashForFileName(const char* FileName, bool cutExtension)
 {
 	const char* s1 = strrchr(FileName, '/'); // assume path delimiters are normalized
-	s1 = (s1 != NULL) ? s1 + 1 : FileName;
-	const char* s2 = stripExtension ? strrchr(s1, '.') : NULL;
+	s1 = (s1 != NULL) ? s1 + 1 : FileName;   // skip path
+	const char* s2 = cutExtension ? strrchr(s1, '.') : NULL;
 	int len = (s2 != NULL) ? s2 - s1 : strlen(s1);
 
 	uint16 hash = 0;
@@ -185,6 +185,7 @@ static int GetHashForFileName(const char* FileName, bool stripExtension)
 static void PrintHashDistribution()
 {
 	int hashCounts[1024];
+	int totalCount = 0;
 	memset(hashCounts, 0, sizeof(hashCounts));
 	for (int hash = 0; hash < GAME_FILE_HASH_SIZE; hash++)
 	{
@@ -193,11 +194,21 @@ static void PrintHashDistribution()
 			count++;
 		assert(count < ARRAY_COUNT(hashCounts));
 		hashCounts[count]++;
+		totalCount += count;
 	}
-	appPrintf("Filename hash distribution:\n");
+	appPrintf("Filename hash distribution: collision count -> num chains\n");
+	int totalCount2 = 0;
 	for (int i = 0; i < ARRAY_COUNT(hashCounts); i++)
-		if (hashCounts[i] > 0)
-			appPrintf("%d -> %d\n", i, hashCounts[i]);
+	{
+		int count = hashCounts[i];
+		if (count > 0)
+		{
+			totalCount2 += count * i;
+			float percent = totalCount2 * 100.0f / totalCount;
+			appPrintf("%d -> %d [%.1f%%]\n", i, count, percent);
+		}
+	}
+	assert(totalCount == totalCount2);
 }
 
 #endif // PRINT_HASH_DISTRIBUTION
@@ -264,8 +275,13 @@ void appRegisterGameFile(const char *FullName, FVirtualFileSystem* parentVfs)
 					delete reader;
 					return;
 				}
-				// add game files
+				// pre-size GameFiles
 				int NumVFSFiles = vfs->NumFiles();
+				if (GameFiles.Num() + NumVFSFiles > GameFiles.Max())
+				{
+					GameFiles.Reserve(GameFiles.Num() + NumVFSFiles);
+				}
+				// add game files
 				for (int i = 0; i < NumVFSFiles; i++)
 				{
 					appRegisterGameFile(vfs->FileName(i), vfs);
@@ -385,6 +401,11 @@ void appRegisterGameFile(const char *FullName, FVirtualFileSystem* parentVfs)
 		}
 	}
 
+	if (GameFiles.Num() + 1 >= GameFiles.Max())
+	{
+		// Resize GameFiles array with large steps
+		GameFiles.Reserve(GameFiles.Num() + 1024);
+	}
 	GameFiles.Add(info);
 	if (IsPackage) GNumPackageFiles++;
 
@@ -482,6 +503,11 @@ void LoadGears4Manifest(const CGameFileInfo* info);
 void appSetRootDirectory(const char *dir, bool recurse)
 {
 	guard(appSetRootDirectory);
+
+#if PROFILE
+	appResetProfiler();
+#endif
+
 	if (dir[0] == 0) dir = ".";	// using dir="" will cause scanning of "/dir1", "/dir2" etc (i.e. drive root)
 	appStrncpyz(GRootDirectory, dir, ARRAY_COUNT(GRootDirectory));
 	ScanGameDirectory(GRootDirectory, recurse);
@@ -505,23 +531,26 @@ void appSetRootDirectory(const char *dir, bool recurse)
 
 #if UNREAL4
 	// Should process .uexp and .ubulk files, register their information for .uasset
+	FStaticString<MAX_PACKAGE_PATH> RelativeName;
+
 	for (int i = 0; i < GameFiles.Num(); i++)
 	{
 		CGameFileInfo *info = GameFiles[i];
-		char SrcFile[MAX_PACKAGE_PATH];
-		appStrncpyz(SrcFile, info->RelativeName, ARRAY_COUNT(SrcFile));
-		char* s = strrchr(SrcFile, '.');
-		if (s && (stricmp(s, ".uasset") == 0 || stricmp(s, ".umap") == 0))
+		const char* Ext = info->GetExtension();
+		if ((stricmp(Ext, "uasset") == 0 || stricmp(Ext, "umap") == 0))
 		{
 			static const char* additionalExtensions[] =
 			{
 				".ubulk",
 				".uexp",
+				".uptnl",
 			};
+			info->GetRelativeNameNoExt(RelativeName);
+			char* extPlace = &RelativeName[0] + RelativeName.Len();
 			for (int ext = 0; ext < ARRAY_COUNT(additionalExtensions); ext++)
 			{
-				strcpy(s, additionalExtensions[ext]);
-				const CGameFileInfo* file = appFindGameFile(SrcFile);
+				strcpy(extPlace, additionalExtensions[ext]);
+				const CGameFileInfo* file = appFindGameFile(*RelativeName);
 				if (file)
 				{
 					info->ExtraSizeInKb += file->SizeInKb;
@@ -530,6 +559,10 @@ void appSetRootDirectory(const char *dir, bool recurse)
 		}
 	}
 #endif // UNREAL4
+
+#if PROFILE
+	appPrintProfiler("Scanned game directory");
+#endif
 
 #if PRINT_HASH_DISTRIBUTION
 	PrintHashDistribution();
@@ -586,7 +619,7 @@ void appSetRootDirectory2(const char *filename)
 	}
 
 	FString root;
-	int detected = 0;				// weigth; 0 = not detected
+	int detected = 0;				// weight; 0 = not detected
 	root = buf;
 
 	// analyze path
@@ -665,7 +698,7 @@ void appSetRootDirectory2(const char *filename)
 }
 
 
-const CGameFileInfo *appFindGameFile(const char *Filename, const char *Ext)
+const CGameFileInfo* appFindGameFile(const char *Filename, const char *Ext)
 {
 	guard(appFindGameFile);
 
@@ -687,8 +720,9 @@ const CGameFileInfo *appFindGameFile(const char *Filename, const char *Ext)
 		if (*s == '/') ShortFilename = s + 1;
 	}
 
-	// Get hash before stripping extension (could be required for files with double extension, like .hdr.rtc for games with Redux textures)
-	int hash = GetHashForFileName(buf, /* stripExtension = */ Ext == NULL);
+	// Get hash before stripping extension (could be required for files with double extension, like .hdr.rtc for games with Redux textures).
+	// If 'Ext' has been provided, we're going to append Ext to the filename later, so there's nothing to cut in this case.
+	int hash = GetHashForFileName(buf, /* cutExtension = */ Ext == NULL);
 #if DEBUG_HASH
 	printf("--> find(%s) hash=%X\n", buf, hash);
 #endif
@@ -708,6 +742,10 @@ const CGameFileInfo *appFindGameFile(const char *Filename, const char *Ext)
 			*s = 0;			// cut extension
 		}
 	}
+	// Now, 'buf' has filename with no extension, and 'Ext' points to extension. 'ShortFilename' contains file name with
+	// stripped path and extension parts.
+	// If 'Ext' is NULL here, the extension is not included into the file name, and we're looking for a package file with
+	// any suitable file extension.
 
 	int nameLen = strlen(ShortFilename);
 #if defined(DEBUG_HASH_NAME) || DEBUG_HASH
@@ -721,7 +759,8 @@ const CGameFileInfo *appFindGameFile(const char *Filename, const char *Ext)
 #if defined(DEBUG_HASH_NAME) || DEBUG_HASH
 		printf("----> verify %s\n", info->RelativeName);
 #endif
-		if (info->Extension - 1 - info->ShortFilename != nameLen)	// info->Extension points to char after '.'
+		// check if info's filename length matches required one
+		if (info->Extension - 1 - info->ShortFilename != nameLen)
 		{
 //			printf("-----> wrong length %d\n", info->Extension - info->ShortFilename);
 			continue;		// different filename length
@@ -784,14 +823,18 @@ struct FindPackageWildcardData
 
 static bool FindPackageWildcardCallback(const CGameFileInfo *file, FindPackageWildcardData &data)
 {
+	FStaticString<MAX_PACKAGE_PATH> Name;
+
 	bool useThisPackage = false;
 	if (data.WildcardContainsPath)
 	{
-		useThisPackage = appMatchWildcard(file->RelativeName, *data.Wildcard, true);
+		file->GetRelativeName(Name);
+		useThisPackage = appMatchWildcard(*Name, *data.Wildcard, true);
 	}
 	else
 	{
-		useThisPackage = appMatchWildcard(file->ShortFilename, *data.Wildcard, true);
+		file->GetCleanName(Name);
+		useThisPackage = appMatchWildcard(*Name, *data.Wildcard, true);
 	}
 	if (useThisPackage)
 	{
@@ -871,22 +914,58 @@ const char *appSkipRootDir(const char *Filename)
 }
 
 
-FArchive *appCreateFileReader(const CGameFileInfo *info)
+FArchive* CGameFileInfo::CreateReader() const
 {
-	if (!info->FileSystem)
+	if (!FileSystem)
 	{
 		// regular file
 		char buf[MAX_PACKAGE_PATH];
-		appSprintf(ARRAY_ARG(buf), "%s/%s", GRootDirectory, info->RelativeName);
+		appSprintf(ARRAY_ARG(buf), "%s/%s", GRootDirectory, RelativeName);
 		return new FFileReader(buf);
 	}
 	else
 	{
 		// file from virtual file system
-		return info->FileSystem->CreateReader(info->RelativeName);
+		return FileSystem->CreateReader(RelativeName);
 	}
 }
 
+
+void CGameFileInfo::GetRelativeName(FString& OutName) const
+{
+	OutName = RelativeName;
+}
+
+FString CGameFileInfo::GetRelativeName() const
+{
+	FString Result;
+	GetRelativeName(Result);
+	return Result;
+}
+
+void CGameFileInfo::GetRelativeNameNoExt(FString& OutName) const
+{
+	// Ineffective function, but will be replaced later anyway
+	OutName = FString(Extension ? Extension - RelativeName - 1 : strlen(RelativeName), RelativeName);
+}
+
+void CGameFileInfo::GetCleanName(FString& OutName) const
+{
+	OutName = ShortFilename;
+}
+
+void CGameFileInfo::GetPath(FString& OutName) const
+{
+	if (ShortFilename > RelativeName)
+	{
+		// Ineffective function, but will be replaced later anyway
+		OutName = FString(ShortFilename - RelativeName - 1, RelativeName);
+	}
+	else
+	{
+		OutName = "";
+	}
+}
 
 void appEnumGameFilesWorker(bool (*Callback)(const CGameFileInfo*, void*), const char *Ext, void *Param)
 {
@@ -901,7 +980,7 @@ void appEnumGameFilesWorker(bool (*Callback)(const CGameFileInfo*, void*), const
 		else
 		{
 			// check extension
-			if (stricmp(info->Extension, Ext) != 0) continue;
+			if (stricmp(info->GetExtension(), Ext) != 0) continue;
 		}
 		if (!Callback(info, Param)) break;
 	}

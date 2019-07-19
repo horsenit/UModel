@@ -20,13 +20,14 @@ void appResetProfiler()
 }
 
 
-void appPrintProfiler()
+void appPrintProfiler(const char* label)
 {
 	if (ProfileStartTime == -1) return;
 	float timeDelta = (appMilliseconds() - ProfileStartTime) / 1000.0f;
 	if (timeDelta < 0.001f && !GNumAllocs && !GSerializeBytes && !GNumSerialize)
-		return;		// perhaps already printed?
-	appPrintf("Loaded in %.2g sec, %d allocs, %.2f MBytes serialized in %d calls.\n",
+		return;		// nothing to print (perhaps already printed?)
+	appPrintf("%s in %.1f sec, %d allocs, %.2f MBytes serialized in %d calls.\n",
+		label ? label : "Loaded",
 		timeDelta, GNumAllocs, GSerializeBytes / (1024.0f * 1024.0f), GNumSerialize);
 	appResetProfiler();
 }
@@ -75,7 +76,7 @@ void FArray::Empty(int count, int elementSize)
 	}
 
 	//!! TODO: perhaps round up 'Max' to 16 bytes, allow comparison below to be 'softer'
-	//!! (i.e. when array is 16 items, and calling Empty(15) - don't reallicate it, unless
+	//!! (i.e. when array is 16 items, and calling Empty(15) - don't reallocate it, unless
 	//!! item size is large
 	if (DataPtr)
 	{
@@ -150,14 +151,14 @@ void FArray::GrowArray(int count, int elementSize)
 void FArray::InsertUninitialized(int index, int count, int elementSize)
 {
 	guard(FArray::InsertUninitialized);
-	assert(index >= 0);
-	assert(index <= DataCount);
-	assert(count >= 0);
+
 	if (!count) return;
 	GrowArray(count, elementSize);
+
 	// move data
 	if (index != DataCount)
 	{
+		assert(index >= 0 && index <= DataCount);
 		memmove(
 			(byte*)DataPtr + (index + count)     * elementSize,
 			(byte*)DataPtr + index               * elementSize,
@@ -187,9 +188,11 @@ void FArray::InsertZeroed(int index, int count, int elementSize)
 void FArray::Remove(int index, int count, int elementSize)
 {
 	guard(FArray::Remove);
-	assert(index >= 0);
+
+	if (!count) return;
 	assert(count > 0);
-	assert(index + count <= DataCount);
+
+	assert(index >= 0 && index + count <= DataCount);
 	// move data
 	if (index + count < DataCount)
 	{
@@ -208,9 +211,11 @@ void FArray::Remove(int index, int count, int elementSize)
 void FArray::RemoveAtSwap(int index, int count, int elementSize)
 {
 	guard(FArray::RemoveAtSwap);
-	assert(index >= 0);
+
+	if (!count) return;
 	assert(count > 0);
-	assert(index + count <= DataCount);
+
+	assert(index >= 0 && index + count <= DataCount);
 	// move data
 	if (index + count < DataCount)
 	{
@@ -265,7 +270,8 @@ FString::FString(int count, const char* src)
 	if (count)
 	{
 		Data.AddUninitialized(count + 1);
-		strncpy(Data.GetData(), src, count);
+		memcpy(Data.GetData(), src, count);
+		Data[count] = 0;
 	}
 }
 
@@ -449,12 +455,12 @@ void FString::TrimStartAndEndInline()
 	FName (string) pool
 -----------------------------------------------------------------------------*/
 
-#define STRING_HASH_SIZE		16384
+#define STRING_HASH_SIZE		32768
 
 struct CStringPoolEntry
 {
 	CStringPoolEntry*	HashNext;
-	int					Length;
+	uint16				Length;
 	char				Str[1];
 };
 
@@ -476,10 +482,35 @@ const char* appStrdupPool(const char* str)
 	}
 	hash &= (STRING_HASH_SIZE - 1);
 
-	for (const CStringPoolEntry* s = StringHashTable[hash]; s; s = s->HashNext)
+#if 0
+	if (true)
 	{
-		if (s->Length == len && !strcmp(str, s->Str))		// found a string
-			return s->Str;
+		// Compare "Length" and first 2 characters with single operation
+		uint32 cmp = len | (str[0] << 16) | (str[1] << 24);
+		for (const CStringPoolEntry* s = StringHashTable[hash]; s; s = s->HashNext)
+		{
+			uint32 cmp2 = *(uint32*)&s->Length;
+			if (cmp == cmp2)
+			{
+				if (!memcmp(str, s->Str, len))
+				{
+					// found a string
+					return s->Str;
+				}
+			}
+		}
+	}
+	else
+#endif
+	{
+		for (const CStringPoolEntry* s = StringHashTable[hash]; s; s = s->HashNext)
+		{
+			if (s->Length == len && !memcmp(str, s->Str, len))
+			{
+				// found a string
+				return s->Str;
+			}
+		}
 	}
 
 	if (!StringPool) StringPool = new CMemoryChain();
@@ -498,19 +529,41 @@ const char* appStrdupPool(const char* str)
 void PrintStringHashDistribution()
 {
 	int hashCounts[1024];
+	int totalCount = 0;
 	memset(hashCounts, 0, sizeof(hashCounts));
 	for (int hash = 0; hash < STRING_HASH_SIZE; hash++)
 	{
 		int count = 0;
-		for (CStringPoolEntry* item = StringHashTable[hash]; item; item = item->HashNext)
+		for (CStringPoolEntry* info = StringHashTable[hash]; info; info = info->HashNext)
 			count++;
 		assert(count < ARRAY_COUNT(hashCounts));
 		hashCounts[count]++;
+		totalCount += count;
 	}
-	appPrintf("String hash distribution:\n");
+	appPrintf("String hash distribution: collision count -> num chains\n");
+	int totalCount2 = 0;
 	for (int i = 0; i < ARRAY_COUNT(hashCounts); i++)
-		if (hashCounts[i] > 0)
-			appPrintf("%d -> %d\n", i, hashCounts[i]);
+	{
+		int count = hashCounts[i];
+		if (count > 0)
+		{
+			totalCount2 += count * i;
+			float percent = totalCount2 * 100.0f / totalCount;
+			appPrintf("%d -> %d [%.1f%%]\n", i, count, percent);
+		}
+	}
+	assert(totalCount == totalCount2);
+
+	// Store string table to a file
+	FILE* f = fopen("StringTable.txt", "w");
+	for (int hash = 0; hash < STRING_HASH_SIZE; hash++)
+	{
+		for (CStringPoolEntry* info = StringHashTable[hash]; info; info = info->HashNext)
+		{
+			fprintf(f, "%s\n", info->Str);
+		}
+	}
+	fclose(f);
 }
 #endif
 

@@ -244,7 +244,6 @@ struct FIndexBuffer3
 	}
 };
 
-// real name (from Android version): FRawStaticIndexBuffer
 struct FSkelIndexBuffer3				// differs from FIndexBuffer3 since version 806 - has ability to store int indices
 {
 	TArray<uint16>		Indices16;
@@ -293,11 +292,18 @@ struct FSkelIndexBuffer3				// differs from FIndexBuffer3 since version 806 - ha
 #endif // PLA
 	old_index_buffer:
 		if (ItemSize == 2)
+		{
 			I.Indices16.BulkSerialize(Ar);
-		else if (ItemSize == 4)
-			I.Indices32.BulkSerialize(Ar);
+		}
 		else
-			appError("Unknown ItemSize %d", ItemSize);
+		{
+#if DMC
+			if (Ar.Game == GAME_DmC && ItemSize == 0) return Ar;
+#endif // DMC
+			if (ItemSize != 4)
+				appPrintf("WARNING: FMultisizeIndexContainer data size %d, assuming int32\n", ItemSize);
+			I.Indices32.BulkSerialize(Ar);
+		}
 
 		int unk;
 		if (Ar.ArVer < 297) Ar << unk;	// at older version compatible with FRawIndexBuffer
@@ -804,6 +810,7 @@ struct FSkeletalMeshVertexBuffer3
 				Ar << S.bUseFullPrecisionUVs;
 			int VertexSize, NumVerts;
 			Ar << S.NumUVSets << VertexSize << NumVerts;
+			assert(S.NumUVSets > 0 && S.NumUVSets < 32); // just verify for some reasonable value
 			GNumGPUUVSets = S.NumUVSets;
 			goto serialize_verts;
 		}
@@ -1543,7 +1550,7 @@ struct FStaticLODModel3
 	no_vert_color:
 		if (Ar.ArVer >= 534)		// post-UT3 code
 			Ar << Lod.ExtraVertexInfluences;
-		if (Ar.ArVer >= 841)		// unknown extra index buffer
+		if (Ar.ArVer >= 841)		// adjacency index buffer
 		{
 			FSkelIndexBuffer3 unk;
 			Ar << unk;
@@ -2127,7 +2134,7 @@ void USkeletalMesh3::ConvertMesh()
 		}
 
 		if (NumReweightedVerts > 0)
-			appPrintf("LOD %d: udjusted weights for %d vertices\n", lod, NumReweightedVerts);
+			appPrintf("LOD %d: adjusted weights for %d vertices\n", lod, NumReweightedVerts);
 
 		unguard;	// ProcessVerts
 
@@ -2392,6 +2399,12 @@ struct FStaticMeshSection3
 					ps3data.unk5.Num(), ps3data.unk6.Num(), ps3data.unk7.Num(), ps3data.unk8.Num());
 			}
 		}
+		if (Ar.ArVer >= 869)
+		{
+			// Picked from GRAV executable
+			int32 unk;
+			Ar << unk;
+		}
 #if XCOM
 		if (Ar.Game == GAME_XcomB)
 		{
@@ -2400,7 +2413,7 @@ struct FStaticMeshSection3
 		}
 		if (Ar.Game == GAME_Xcom2 && Ar.ArLicenseeVer >= 83)
 		{
-			int unk;
+			int32 unk;
 			Ar << unk;
 		}
 #endif // XCOM
@@ -3397,7 +3410,7 @@ struct FkDOPTriangle3
 
 #if FURY
 
-struct FFuryStaticMeshUnk	// in other ganes this structure serialized after LOD models, in Fury - before
+struct FFuryStaticMeshUnk	// in other games this structure serialized after LOD models, in Fury - before
 {
 	int					unk0;
 	int					fC, f10, f14;

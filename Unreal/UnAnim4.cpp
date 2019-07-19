@@ -11,7 +11,8 @@
 #include "TypeConvert.h"
 
 //#define DEBUG_DECOMPRESS	1
-//#define DEBUG_SKELMESH		1
+//#define DEBUG_SKELMESH	1
+//#define DEBUG_ANIM		1
 
 // References in UE4 code: Engine/Public/AnimationCompression.h
 // - FAnimationCompression_PerTrackUtils
@@ -123,6 +124,27 @@ FArchive& operator<<(FArchive& Ar, FReferencePose& P)
 
 	unguard;
 }
+
+struct FSmartName
+{
+	FName DisplayName;
+
+	friend FArchive& operator<<(FArchive& Ar, FSmartName& N)
+	{
+		Ar << N.DisplayName;
+		if (FAnimPhysObjectVersion::Get(Ar) < FAnimPhysObjectVersion::RemoveUIDFromSmartNameSerialize)
+		{
+			uint16 UID;
+			Ar << UID;
+		}
+		if (FAnimPhysObjectVersion::Get(Ar) < FAnimPhysObjectVersion::SmartNameRefactorForDeterministicCooking)
+		{
+			FGuid Guid;
+			Ar << Guid;
+		}
+		return Ar;
+	}
+};
 
 FArchive& operator<<(FArchive& Ar, FSmartNameMapping& N)
 {
@@ -824,7 +846,8 @@ void USkeleton::ConvertAnims(UAnimSequence4* Seq)
 	UAnimSequence
 -----------------------------------------------------------------------------*/
 
-// PostSerialize() adds some serialization logic to data which were serialized as properties
+// PostSerialize() adds some serialization logic to data which were serialized as properties. These functions
+// were called in UE4.12 and earlier as "Serialize" and in 4.13 renamed to "PostSerialize".
 
 void FAnimCurveBase::PostSerialize(FArchive& Ar)
 {
@@ -845,6 +868,19 @@ void FRawCurveTracks::PostSerialize(FArchive& Ar)
 		FloatCurves[i].PostSerialize(Ar);
 	}
 	//!! non-cooked assets also may have TransformCurves
+}
+
+ FArchive& operator<<(FArchive& Ar, FRawCurveTracks& T)
+{
+	guard(FRawCurveTracks<<);
+	// This structure is always serialized as property list
+	FRawCurveTracks::StaticGetTypeinfo()->SerializeUnrealProps(Ar, &T);
+	if (Ar.Game < GAME_UE4(13))
+	{
+		T.PostSerialize(Ar);
+	}
+	return Ar;
+	unguard;
 }
 
 void UAnimSequenceBase::Serialize(FArchive& Ar)
@@ -886,14 +922,22 @@ void UAnimSequence4::Serialize(FArchive& Ar)
 
 		if (bSerializeCompressedData)
 		{
+			// UAnimSequence::SerializeCompressedData()
 			// these fields were serialized as properties in pre-UE4.12 engine version
 			Ar << (byte&)KeyEncodingFormat;
 			Ar << (byte&)TranslationCompressionFormat;
 			Ar << (byte&)RotationCompressionFormat;
 			Ar << (byte&)ScaleCompressionFormat;
+		#if DEBUG_ANIM
+			appPrintf("Key: %d Trans: %d Rot: %d Scale: %d\n", KeyEncodingFormat, TranslationCompressionFormat,
+				RotationCompressionFormat, ScaleCompressionFormat);
+		#endif
 
 			Ar << CompressedTrackOffsets;
 			Ar << CompressedScaleOffsets;
+		#if DEBUG_ANIM
+			appPrintf("TrackOffsets: %d ScaleOffsets: %d\n", CompressedTrackOffsets.Num(), CompressedScaleOffsets.OffsetData.Num());
+		#endif
 
 			if (Ar.Game >= GAME_UE4(21))
 			{
@@ -907,14 +951,27 @@ void UAnimSequence4::Serialize(FArchive& Ar)
 			}
 
 			Ar << CompressedTrackToSkeletonMapTable;
-			Ar << CompressedCurveData;
 
+			if (Ar.Game < GAME_UE4(22))
+			{
+				Ar << CompressedCurveData;
+			}
+			else
+			{
+				TArray<FSmartName> CompressedCurveNames;
+				Ar << CompressedCurveNames;
+			}
+
+#if LIS2
+			if (Ar.Game == GAME_LIS2) goto no_raw_data_size; // this is basically UE4.17, but with older animation format
+#endif
 			if (Ar.Game >= GAME_UE4(17))
 			{
 				// UE4.17+
 				int32 CompressedRawDataSize;
 				Ar << CompressedRawDataSize;
 			}
+		no_raw_data_size:
 			if (Ar.Game >= GAME_UE4(22))
 			{
 				int32 CompressedNumFrames;
@@ -922,7 +979,28 @@ void UAnimSequence4::Serialize(FArchive& Ar)
 			}
 
 			// compressed data
-			Ar << CompressedByteStream;
+			int32 NumBytes;
+			Ar << NumBytes;
+
+			bool bUseBulkData = false;
+			if (Ar.Game >= GAME_UE4(23))
+				Ar << bUseBulkData;
+			assert(bUseBulkData == false);
+
+			if (NumBytes)
+			{
+				CompressedByteStream.AddUninitialized(NumBytes);
+				Ar.Serialize(CompressedByteStream.GetData(), NumBytes);
+			}
+
+			if (Ar.Game >= GAME_UE4(22))
+			{
+				FString CurveCodecPath;
+				TArray<byte> CompressedCurveByteStream;
+				Ar << CurveCodecPath << CompressedCurveByteStream;
+			}
+
+			// End of UAnimSequence::SerializeCompressedData()
 
 			// after compressed data ...
 			Ar << bUseRawDataOnly;
@@ -944,6 +1022,8 @@ void UAnimSequence4::Serialize(FArchive& Ar)
 // CompressedByteStream before translation and rotation. In other words, data reordered, but
 // offsets pointed to original data. Here we're reordering data back, duplicating functionality
 // of AEFPerTrackCompressionCodec::ByteSwapOut().
+// The bug was reported to Epic at UDN: https://udn.unrealengine.com/questions/488635/view.html
+// and it seems it was already fixed for UE4.23.
 void UAnimSequence4::TransferPerTrackData(TArray<uint8>& Dst, const TArray<uint8>& Src)
 {
 	guard(UAnimSequence4::TransferPerTrackData);
@@ -1061,7 +1141,7 @@ void UAnimSequence4::PostLoad()
 	if (!Skeleton) return;		// missing package etc
 	Skeleton->ConvertAnims(this);
 
-	// Release original animaiton data to save memory
+	// Release original animation data to save memory
 	RawAnimationData.Empty();
 	CompressedByteStream.Empty();
 	CompressedTrackOffsets.Empty();

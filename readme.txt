@@ -3,7 +3,7 @@ UMODEL (UE Viewer)
 
 
 Please support the development by making a donation here:
-http://www.gildor.org/en/donate
+https://www.gildor.org/en/donate
 
 
 System requirements
@@ -19,27 +19,27 @@ List of supported games
 Supported all Unreal engine versions (1-4). The list of supported games consists of
 more than 300 game titles, it is not reasonable to include it here. Some game titles
 has limited support or not supported at all. Detailed information can be found here:
-http://www.gildor.org/projects/umodel/compat
+https://www.gildor.org/projects/umodel/compat
 
 
 Web resources
 ~~~~~~~~~~~~~
 Umodel home page and forum:
-http://www.gildor.org/en/projects/umodel
+https://www.gildor.org/en/projects/umodel
 or Russian page:
-http://www.gildor.org/projects/umodel
+https://www.gildor.org/projects/umodel
 
 Umodel FAQ:
-http://www.gildor.org/projects/umodel/faq
+https://www.gildor.org/projects/umodel/faq
 
 Some tutorials available here:
-http://www.gildor.org/projects/umodel/tutorials
+https://www.gildor.org/projects/umodel/tutorials
 
 Youtube page with tutorials and news:
 https://www.youtube.com/playlist?list=PLJROJrENPVvK-V8PCTR9qBmY0Q7v4wCym
 
 Other documentation:
-http://www.gildor.org/smf/index.php/board,9.0.html
+https://www.gildor.org/smf/index.php/board,9.0.html
 
 
 Quick start
@@ -54,6 +54,9 @@ list of available command line options run 'umodel -help'.
 You could also drag a package file (.upk, .xxx, .ukx etc) to umodel's icon to launch
 the application. However default settings will be used in this case, so if game requires
 some compatibility options, this will not work.
+
+You may also use response file to provide command line arguments. More info is in Wiki page:
+https://github.com/gildor2/UModel/wiki/Response-file
 
 
 GUI
@@ -95,9 +98,9 @@ sequences are listed by '[' and ']' keys, playback is started with a Space key.
 Psk/psa export
 ~~~~~~~~~~~~~~
 To load psk or psa into the 3ds Max you'll need ActorX Importer script created by me:
-http://www.gildor.org/projects/unactorx
+https://www.gildor.org/projects/unactorx
 It has own announcements thread here:
-http://www.gildor.org/smf/index.php/topic,228.0.html
+https://www.gildor.org/smf/index.php/topic,228.0.html
 
 Some meshes contains information which cannot fit into psk standard. For this reason I've
 extended the format to hold advanced information. Files in this format has extension pskx
@@ -115,9 +118,9 @@ skeleton hierarchy because Unreal engine uses hierarchy from the mesh, not from 
 animation. Some md5 viewers/importers does require md5anim hierarchy, some - does not.
 
 There is a 3ds Max md5mesh/md5anim importer script available on umodel forum:
-http://www.gildor.org/smf/index.php?topic=87.0
+https://www.gildor.org/smf/index.php?topic=87.0
 or here
-http://www.gildor.org/downloads
+https://www.gildor.org/downloads
 This script was originally created by der_ton, but was updated by me.
 
 Please note that psk/psa format is more powerful, and ActorX Importer script has much more
@@ -199,6 +202,74 @@ detex
 
 Changes
 ~~~~~~~
+18.07.2019
+- UI: using tabbed dialog for options
+- UI: showing export and save packages options when user doing these operations, the options window could be
+  suppressed for next export/save
+
+11.07.2019
+- updated Lineage 2 SkeletalMesh support
+
+05.07.2019
+- added support for final version of Unreal Tournament 4 (requires game override: -game=ut4)
+
+22.06.2019
+- support for newer UE3 StaticMesh format
+
+12.06.2019
+- initial support for UE4.23
+
+13.05.2019
+- added Life is Strange 2 support (requires -game=lis2 override)
+
+11.05.2019
+- added support for New Gundam Breaker (requires game override, -game=ngb)
+
+16.04.2019
+- added response file support, more info: https://github.com/gildor2/UModel/wiki/Response-file
+  - usage: umodel @response.txt
+
+14.04.2019
+- improved package dialog:
+  - added "open" actions for folder
+  - added "copy path" action for package list
+  - added "scan content" for folder (so you don't need to scan everything if interested only in single folder)
+
+12.04.2019
+- final UE4.22 support
+
+23.03.2019
+- changed default texture ("UV checker")
+
+21.03.2019
+- fixed crash with some pre-UE4.13 animation tracks
+
+20.03.2019
+- optimized startup and content scan times when working with huge games
+
+18.03.2019
+- when exporting, avoiding adding numeric suffixes to files which are saved more than once whenever possible
+  (adding only for UE3 with special options)
+
+12.03.2019
+- UModel is no longer crashed when trying to open a file with wrong tag - a warning message is displayed instead
+
+10.03.2019
+- UE4.22 StaticMesh support
+
+06.03.2019
+- made error window larger and resizeable
+
+28.02.2019
+- memory use optimizations, package information now uses 25% less memory
+
+22.02.2019
+- 32-bit Windows build now can use up to 4Gb of RAM when running on 64-bit Windows
+
+06.02.2019
+- "save packages" now preserves oridinal directory directory structure; Windows version has options for selecting save
+  path and option for building or not directory hierarchy (for linux, same things could be changed in cfg file)
+
 08.01.2019
 - added Nintendo Switch texture support; activated with option "-nsw" or with selecting Nintendo Switch from platform
   list
@@ -283,7 +354,7 @@ Changes
 - implemented support for loading of UE3 and UE4 png-compressed textures
 
 16.05.2018
-- added functionality which finds all animations for currectly opened UE4 SkeletalMesh, accessible with Ctrl+A
+- added functionality which finds all animations for currently opened UE4 SkeletalMesh, accessible with Ctrl+A
   key or via "SkeletalMesh | Find animations" menu
 
 13.05.2018
@@ -357,7 +428,7 @@ Changes
 - exporting "source art" (png) textures whenever possible - for UE3 and UE4 editor packages
 
 02.10.2017
-- added Fortnite support (currently requres game override)
+- added Fortnite support (currently requires game override)
 
 29.09.2017
 - added Unreal engine 4.17 support and initial UE4.18 support
@@ -952,7 +1023,7 @@ Changes
 - implemented support for SkeletalMesh with more than 64k vertices
 
 21.11.2011
-- major rewritting of SkeletalMesh subsystem; implemented support for multiple UV sets,
+- major rewriting of SkeletalMesh subsystem; implemented support for multiple UV sets,
   which can be switched in viewer by 'U' key and exported to psk when "-pskx" option is
   supplied
 
@@ -978,7 +1049,7 @@ Changes
 - improved positioning of the mesh in a viewer
 
 06.11.2011
-- major rewritting of the StaticMesh subsystem
+- major rewriting of the StaticMesh subsystem
   - implemented UE3 LOD support:
     - LODs are exported when "-lods" switch is passed to the command line
     - LODs can be switched in the viewer with 'L' key
@@ -1653,7 +1724,7 @@ Changes
 - additional fix for Lineage LOD models
 
 23.11.2008
-- fixed skeletal LOD model visualisation
+- fixed skeletal LOD model visualization
 - implemented skinning for LOD models
 - Lineage2: implemented support for Lineage-specific LOD models
 - Lineage2: restoring base skeletal mesh from 1st LOD when needed

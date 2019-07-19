@@ -196,11 +196,11 @@ typedef size_t					address_t;
 #endif
 
 #ifndef ROL32
-#define ROL32(val,shift)		( ((val) << (shift)) | ((val) >> (32-(shift))) )
+#define ROL32(val,shift)		( (unsigned(val) << (shift)) | (unsigned(val) >> (32-(shift))) )
 #endif
 
 #ifndef ROR32
-#define ROR32(val,shift)		( ((val) >> (shift)) | ((val) << (32-(shift))) )
+#define ROR32(val,shift)		( (unsigned(val) >> (shift)) | (unsigned(val) << (32-(shift))) )
 #endif
 
 
@@ -329,6 +329,9 @@ void appNormalizeFilename(char *filename);
 void appMakeDirectory(const char *dirname);
 void appMakeDirectoryForFile(const char *filename);
 
+// Parsing reponse file (file with command line arguments). Throws an error if problems reading file.
+void appParseResponseFile(const char* filename, int& outArgc, const char**& outArgv);
+
 #define FS_FILE				1
 #define FS_DIR				2
 
@@ -355,6 +358,12 @@ FORCEINLINE void* operator new[](size_t size)
 }
 
 FORCEINLINE void operator delete(void* ptr)
+{
+	appFree(ptr);
+}
+
+// C++17 (delete with alignment)
+FORCEINLINE void operator delete(void* ptr, size_t)
 {
 	appFree(ptr);
 }
@@ -529,9 +538,9 @@ extern bool GUseDebugger;
 			__declspec(dllimport) unsigned long __stdcall GetTickCount();
 		}
 #		endif
-			// Local implementation of GetTickCount()
-			unsigned long GetTickCount();
 #	else
+		// Local implementation of GetTickCount() for non-Windows platforms
+		unsigned long GetTickCount();
 #	endif
 #	define appMilliseconds()		GetTickCount()
 #endif // RENDERING

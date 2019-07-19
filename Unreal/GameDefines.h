@@ -149,14 +149,16 @@
 #if UNREAL4
 
 #define GEARS4			1		// Gears of War 4
-#define FRIDAY13		1		// Friday the 13th: The Game
 #define TEKKEN7			1		// Tekken 7
 #define LAWBREAKERS		1		// Lawbreakers
 #define SOD2			1		// State of Decay 2
 #define DAUNTLESS		1		// Dauntless
 #define PARAGON			1		// Paragon
+#define UT4				1		// Unreal Tournament 4
 #define ARK				1		// Ark: Survival Evolved
 #define HIT				1		// Heroes of Incredible Tales
+#define NGB				1		// New Gundam Breaker
+#define LIS2			1		// Life is Strange 2
 
 #define SPECIAL_TAGS	1		// games with different PACKAGE_FILE_TAG
 

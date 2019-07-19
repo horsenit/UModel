@@ -157,6 +157,9 @@ lod_fields2:
 	{
 		int unk;
 		Ar << unk;
+		// From forum discussion: version 6 has 1 more byte here
+		if (Version >= 6)
+			Ar.Seek(Ar.Tell()+1);
 	}
 #endif // LINEAGE2
 #if BATTLE_TERR
@@ -358,6 +361,11 @@ void USkeletalMesh::Serialize(FArchive &Ar)
 #if TRIBES3
 	TRIBES_HDR(Ar, 4);
 #endif
+
+#if DEBUG_SKELMESH
+	appPrintf("Version: %d\n", Version);
+#endif
+
 	Ar << Points2;
 #if BATTLE_TERR
 	if (Ar.Game == GAME_BattleTerr && Ar.ArVer >= 134)
@@ -1667,7 +1675,7 @@ void UStaticMesh::LoadExternalUC2Data()
 
 	//?? S.NumFaces is used as NumIndices, but it is not a multiply of 3
 	//?? (sometimes is is N*3, sometimes = N*3+1, sometimes - N*3+2 ...)
-	//?? May be UC2 uses triangle strips instead of trangles?
+	//?? May be UC2 uses triangle strips instead of triangles?
 	assert(IndexStream1.Indices.Num() == 0);	//???
 /*	int NumIndices = 0;
 	for (i = 0; i < Sections.Num(); i++)
@@ -1679,7 +1687,7 @@ void UStaticMesh::LoadExternalUC2Data()
 		FindXprData will return block in following format:
 			dword	unk
 			dword	itemSize (6 for index stream = 3 verts * sizeof(int16))
-					(or unknown meanung in a case of trangle strips)
+					(or unknown meaning in a case of triangle strips)
 			dword	unk
 			data[]
 			dword*5	unk (may be include padding?)

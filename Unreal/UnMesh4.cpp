@@ -47,8 +47,6 @@
 #error MAX_STATIC_UV_SETS_UE4 too large
 #endif
 
-//#define TEXSTREAM_MAX_NUM_UVCHANNELS	4
-
 
 /*-----------------------------------------------------------------------------
 	Common data types
@@ -94,7 +92,7 @@ struct FPositionVertexBuffer4
 	}
 };
 
-//?? TODO: rename, because these vars are now used for both mesh types
+//?? TODO: rename, because these vars are now used for both mesh types (see FStaticMeshVertexBuffer4)
 static int  GNumStaticUVSets   = 1;
 static bool GUseStaticFloatUVs = true;
 static bool GUseHighPrecisionTangents = false;
@@ -146,6 +144,7 @@ struct FStaticMeshUVItem4
 	}
 };
 
+// Note: this structure is used for both StaticMesh and SkeletalMesh
 struct FStaticMeshVertexBuffer4
 {
 	int				NumTexCoords;
@@ -163,6 +162,8 @@ struct FStaticMeshVertexBuffer4
 		S.Stride = -1;
 
 		FStripDataFlags StripFlags(Ar, VER_UE4_STATIC_SKELETAL_MESH_SERIALIZATION_FIX);
+
+		// FStaticMeshVertexBuffer::SerializeMetaData()
 		Ar << S.NumTexCoords;
 		if (Ar.Game < GAME_UE4(19))
 		{
@@ -390,7 +391,7 @@ struct FSoftVertex4 : public FSkelMeshVertexBase
 	}
 };
 
-// Editor-only skeletal mesh vertex used for single boxe (has been deprecated after
+// Editor-only skeletal mesh vertex used for single bone (has been deprecated after
 // FSkeletalMeshCustomVersion::CombineSoftAndRigidVerts)
 // TODO: review - we're using exactly the same data layout as for FSoftVertex4, but different
 //   serialization function - can achieve that with TArray::Serialize2<>.
@@ -469,25 +470,6 @@ struct FClothingSectionData
 	}
 };
 
-/*
-struct FMeshUVChannelInfo
-{
-	bool					bInitialized;
-	bool					bOverrideDensities;
-	float					LocalUVDensities[TEXSTREAM_MAX_NUM_UVCHANNELS];
-
-	friend FArchive& operator<<(FArchive& Ar, FMeshUVChannelInfo& V)
-	{
-		Ar << V.bInitialized << V.bOverrideDensities;
-		for (int i = 0; i < TEXSTREAM_MAX_NUM_UVCHANNELS; i++)
-		{
-			Ar << V.LocalUVDensities[i];
-		}
-		return Ar;
-	}
-};
-*/
-
 struct FSkeletalMaterial
 {
 	UMaterialInterface*		Material;
@@ -504,7 +486,13 @@ struct FSkeletalMaterial
 		if (FEditorObjectVersion::Get(Ar) >= FEditorObjectVersion::RefactorMeshEditorMaterials)
 		{
 			Ar << M.MaterialSlotName;
-			if (Ar.ContainsEditorData())
+			bool bSerializeImportedMaterialSlotName = Ar.ContainsEditorData();
+			if (FCoreObjectVersion::Get(Ar) >= FCoreObjectVersion::SkeletalMaterialEditorDataStripping)
+			{
+				// UE4.22+
+				Ar << bSerializeImportedMaterialSlotName;
+			}
+			if (bSerializeImportedMaterialSlotName)
 			{
 				FName ImportedMaterialSlotName;
 				Ar << ImportedMaterialSlotName;
@@ -645,7 +633,7 @@ struct FSkelMeshSection4
 				Ar << S.NumVertices;
 			if (SkelMeshVer < FSkeletalMeshCustomVersion::CombineSoftAndRigidVerts)
 			{
-				int NumRigidVerts, NumSoftVerts;
+				int32 NumRigidVerts, NumSoftVerts;
 				Ar << NumRigidVerts << NumSoftVerts;
 			}
 			Ar << S.MaxBoneInfluences;
@@ -679,6 +667,13 @@ struct FSkelMeshSection4
 
 			S.HasClothData = ClothMappingData.Num() > 0;
 
+#if NGB
+			if (Ar.Game == GAME_NGB)
+			{
+				int32 unk;
+				Ar << unk;
+			}
+#endif // NGB
 			// UE4.19+
 			if (FOverlappingVerticesCustomVersion::Get(Ar) >= FOverlappingVerticesCustomVersion::DetectOVerlappingVertices)
 			{
@@ -714,9 +709,8 @@ struct FSkelMeshSection4
 #if PARAGON
 		if (Ar.Game == GAME_Paragon)
 		{
-			int32 bSomething;
+			bool bSomething;
 			Ar << bSomething;
-			assert(bSomething == 0 || bSomething == 1);
 		}
 #endif // PARAGON
 
@@ -851,7 +845,7 @@ struct FSkelMeshChunk4
 
 struct FSkeletalMeshVertexBuffer4
 {
-	int						NumTexCoords;
+	int32					NumTexCoords;
 	FVector					MeshExtension;		// not used in engine - there's no support for packed position (look for "FPackedPosition")
 	FVector					MeshOrigin;			// ...
 	bool					bUseFullPrecisionUVs;
@@ -868,6 +862,7 @@ struct FSkeletalMeshVertexBuffer4
 		FStripDataFlags StripFlags(Ar, VER_UE4_STATIC_SKELETAL_MESH_SERIALIZATION_FIX);
 		Ar << B.NumTexCoords << B.bUseFullPrecisionUVs;
 		DBG_SKEL("  TC=%d FullPrecision=%d\n", B.NumTexCoords, B.bUseFullPrecisionUVs);
+		assert(B.NumTexCoords > 0 && B.NumTexCoords < 32); // just verify for some reasonable value
 
 		if (Ar.ArVer >= VER_UE4_SUPPORT_GPUSKINNING_8_BONE_INFLUENCES &&
 			FSkeletalMeshCustomVersion::Get(Ar) < FSkeletalMeshCustomVersion::UseSeparateSkinWeightBuffer)
@@ -965,6 +960,42 @@ struct FSkinWeightVertexBuffer
 	}
 };
 
+
+// UE4.23+
+ struct FRuntimeSkinWeightProfileData
+ {
+	 struct FSkinWeightOverrideInfo
+	 {
+		 uint32 InfluencesOffset;
+		 uint8 NumInfluences;
+
+		 friend FArchive& operator<<(FArchive& Ar, FSkinWeightOverrideInfo& Data)
+		 {
+			 return Ar << Data.InfluencesOffset << Data.NumInfluences;
+		 }
+	 };
+
+	 TArray<FSkinWeightOverrideInfo> OverridesInfo;
+	 TArray<uint16> Weights;
+	 TMap<uint32, uint32> VertexIndexOverrideIndex;
+
+	 friend FArchive& operator<<(FArchive& Ar, FRuntimeSkinWeightProfileData& Data)
+	 {
+		 return Ar << Data.OverridesInfo << Data.Weights << Data.VertexIndexOverrideIndex;
+	 }
+ };
+
+struct FSkinWeightProfilesData
+{
+	TMap<FName, FRuntimeSkinWeightProfileData> OverrideData;
+
+	friend FArchive& operator<<(FArchive& Ar, FSkinWeightProfilesData& Data)
+	{
+		guard(FSkinWeightProfilesData<<);
+		return Ar << Data.OverrideData;
+		unguard;
+	}
+};
 
 struct FStaticLODModel4
 {
@@ -1189,6 +1220,12 @@ struct FStaticLODModel4
 
 			if (Lod.HasClothData())
 				Ar << Lod.ClothVertexBuffer;
+
+			if (Ar.Game >= GAME_UE4(23))
+			{
+				FSkinWeightProfilesData SkinWeightProfilesData;
+				Ar << SkinWeightProfilesData;
+			}
 
 			guard(BuildVertexData);
 
@@ -1648,7 +1685,7 @@ struct FRawStaticIndexBuffer4
 struct FWeightedRandomSampler
 {
 	TArray<float>			Prob;
-	TArray<uint32>			Alias;
+	TArray<int32>			Alias;
 	float					TotalWeight;
 
 	friend FArchive& operator<<(FArchive& Ar, FWeightedRandomSampler& S)
@@ -1678,7 +1715,15 @@ struct FStaticMeshLODModel4
 	FRawStaticIndexBuffer4   AdjacencyIndexBuffer;
 	float                    MaxDeviation;
 
-	friend FArchive& operator<<(FArchive& Ar, FStaticMeshLODModel4 &Lod)
+	enum EClassDataStripFlag
+	{
+		CDSF_AdjacencyData = 1,
+		// UE4.20+
+		CDSF_MinLodData = 2,			// used to drop some LODs
+		CDSF_ReversedIndexBuffer = 4,
+	};
+
+	static void Serialize(FArchive& Ar, FStaticMeshLODModel4& Lod)
 	{
 		guard(FStaticMeshLODModel4<<);
 
@@ -1691,9 +1736,8 @@ struct FStaticMeshLODModel4
 		Ar << Lod.Sections;
 #if DEBUG_STATICMESH
 		appPrintf("%d sections\n", Lod.Sections.Num());
-		for (int i = 0; i < Lod.Sections.Num(); i++)
+		for (const FStaticMeshSection4& S : Lod.Sections)
 		{
-			FStaticMeshSection4 &S = Lod.Sections[i];
 			appPrintf("  mat=%d firstIdx=%d numTris=%d firstVers=%d maxVert=%d\n", S.MaterialIndex, S.FirstIndex, S.NumTriangles,
 				S.MinVertexIndex, S.MaxVertexIndex);
 		}
@@ -1701,61 +1745,137 @@ struct FStaticMeshLODModel4
 
 		Ar << Lod.MaxDeviation;
 
-		enum StripFlags
+		if (Ar.Game < GAME_UE4(23))
 		{
-			AdjacencyDataStripFlag = 1,
-			// UE4.20+
-			MinLodDataStripFlag = 2,			// used to drop some LODs
-			ReversedIndexBufferStripFlag = 4,
-		};
+			if (!StripFlags.IsDataStrippedForServer() && !StripFlags.IsClassDataStripped(CDSF_MinLodData))
+			{
+				SerializeBuffersLegacy(Ar, Lod, StripFlags);
+			}
+			return;
+		}
 
-		if (!StripFlags.IsDataStrippedForServer() && !StripFlags.IsClassDataStripped(MinLodDataStripFlag))
+		// UE4.22+
+		bool bIsLODCookedOut, bInlined;
+		Ar << bIsLODCookedOut << bInlined;
+
+		if (!StripFlags.IsDataStrippedForServer() && !bIsLODCookedOut)
 		{
-			Ar << Lod.PositionVertexBuffer;
-			Ar << Lod.VertexBuffer;
-			Ar << Lod.ColorVertexBuffer;
-			Ar << Lod.IndexBuffer;
-
-			if (Ar.ArVer >= VER_UE4_SOUND_CONCURRENCY_PACKAGE && !StripFlags.IsClassDataStripped(ReversedIndexBufferStripFlag))
+			if (bInlined)
 			{
-				Ar << Lod.ReversedIndexBuffer;
+				SerializeBuffers(Ar, Lod);
+				// FStaticMeshBuffersSize
+				uint32 SerializedBuffersSize, DepthOnlyIBSize, ReversedIBsSize;
+				Ar << SerializedBuffersSize << DepthOnlyIBSize << ReversedIBsSize;
 			}
-			Ar << Lod.DepthOnlyIndexBuffer;
-			if (Ar.ArVer >= VER_UE4_SOUND_CONCURRENCY_PACKAGE && !StripFlags.IsClassDataStripped(ReversedIndexBufferStripFlag))
+			else
 			{
-				Ar << Lod.ReversedDepthOnlyIndexBuffer;
-			}
-			/// reference for VER_UE4_SOUND_CONCURRENCY_PACKAGE:
-			/// 25.09.2015 - 948c1698
-
-			if (Ar.ArVer >= VER_UE4_FTEXT_HISTORY && Ar.ArVer < VER_UE4_RENAME_CROUCHMOVESCHARACTERDOWN)
-			{
-				/// reference:
-				/// 03.06.2014 - 1464dcf2
-				/// 28.08.2014 - f5238f04
-				FDistanceFieldVolumeData DistanceFieldData;
-				Ar << DistanceFieldData;
-			}
-
-			if (!StripFlags.IsEditorDataStripped())
-				Ar << Lod.WireframeIndexBuffer;
-
-			if (!StripFlags.IsClassDataStripped(AdjacencyDataStripFlag))
-				Ar << Lod.AdjacencyIndexBuffer;
-
-			if (Ar.Game >= GAME_UE4(16))
-			{
-				TArray<FStaticMeshSectionAreaWeightedTriangleSampler> AreaWeightedSectionSamplers;
-				FStaticMeshAreaWeightedSectionSampler AreaWeightedSampler;
-
-				AreaWeightedSectionSamplers.AddZeroed(Lod.Sections.Num());
-				for (int i = 0; i < AreaWeightedSectionSamplers.Num(); i++)
-					Ar << AreaWeightedSectionSamplers[i];
-				Ar << AreaWeightedSampler;
+				// todo
+				appError("Serialize from bulk");
 			}
 		}
 
-		return Ar;
+		unguard;
+	}
+
+	// Pre-UE4.23 code
+	static void SerializeBuffersLegacy(FArchive& Ar, FStaticMeshLODModel4& Lod, const FStripDataFlags& StripFlags)
+	{
+		guard(FStaticMeshLODModel4::SerializeBuffersLegacy);
+
+		Ar << Lod.PositionVertexBuffer;
+		Ar << Lod.VertexBuffer;
+		Ar << Lod.ColorVertexBuffer;
+		Ar << Lod.IndexBuffer;
+
+		/// reference for VER_UE4_SOUND_CONCURRENCY_PACKAGE (UE4.9+):
+		/// 25.09.2015 - 948c1698
+		if (Ar.ArVer >= VER_UE4_SOUND_CONCURRENCY_PACKAGE && !StripFlags.IsClassDataStripped(CDSF_ReversedIndexBuffer))
+		{
+			Ar << Lod.ReversedIndexBuffer;
+			Ar << Lod.DepthOnlyIndexBuffer;
+			Ar << Lod.ReversedDepthOnlyIndexBuffer;
+		}
+		else
+		{
+			// UE4.8 or older, or when has CDSF_ReversedIndexBuffer
+			Ar << Lod.DepthOnlyIndexBuffer;
+		}
+
+		if (Ar.ArVer >= VER_UE4_FTEXT_HISTORY && Ar.ArVer < VER_UE4_RENAME_CROUCHMOVESCHARACTERDOWN)
+		{
+			/// reference:
+			/// 03.06.2014 - 1464dcf2
+			/// 28.08.2014 - f5238f04
+			FDistanceFieldVolumeData DistanceFieldData;
+			Ar << DistanceFieldData;
+		}
+
+		if (!StripFlags.IsEditorDataStripped())
+			Ar << Lod.WireframeIndexBuffer;
+
+		if (!StripFlags.IsClassDataStripped(CDSF_AdjacencyData))
+			Ar << Lod.AdjacencyIndexBuffer;
+
+#if UT4
+		if (Ar.Game == GAME_UT4) return;
+#endif
+
+		if (Ar.Game >= GAME_UE4(16))
+		{
+			TArray<FStaticMeshSectionAreaWeightedTriangleSampler> AreaWeightedSectionSamplers;
+			FStaticMeshAreaWeightedSectionSampler AreaWeightedSampler;
+
+			AreaWeightedSectionSamplers.AddZeroed(Lod.Sections.Num());
+			for (int i = 0; i < AreaWeightedSectionSamplers.Num(); i++)
+				Ar << AreaWeightedSectionSamplers[i];
+			Ar << AreaWeightedSampler;
+		}
+
+		unguard;
+	}
+
+	//todo: review comment, it has been written when I thought that those changes have to appear in 4.22, but they didn't
+	// UE4.23+. At the time of UE4.22, the function is exactly the same as SerializeBuffersLegacy (with exception of own
+	// FStripDataFlags), however I decided to split it to avoid later mess with newer engine updates.
+	static void SerializeBuffers(FArchive& Ar, FStaticMeshLODModel4& Lod)
+	{
+		guard(FStaticMeshLODModel4::SerializeBuffers);
+
+#if DEBUG_STATICMESH
+		DUMP_ARC_BYTES(Ar, 2, "SerializeBuffers.StripFlags");
+#endif
+		FStripDataFlags StripFlags(Ar);
+
+		Ar << Lod.PositionVertexBuffer;
+		Ar << Lod.VertexBuffer;
+		Ar << Lod.ColorVertexBuffer;
+		Ar << Lod.IndexBuffer;
+
+		if (!StripFlags.IsClassDataStripped(CDSF_ReversedIndexBuffer))
+		{
+			Ar << Lod.ReversedIndexBuffer;
+		}
+		Ar << Lod.DepthOnlyIndexBuffer;
+
+		if (!StripFlags.IsClassDataStripped(CDSF_ReversedIndexBuffer))
+		{
+			Ar << Lod.ReversedDepthOnlyIndexBuffer;
+		}
+
+		if (!StripFlags.IsEditorDataStripped())
+			Ar << Lod.WireframeIndexBuffer;
+
+		if (!StripFlags.IsClassDataStripped(CDSF_AdjacencyData))
+			Ar << Lod.AdjacencyIndexBuffer;
+
+		TArray<FStaticMeshSectionAreaWeightedTriangleSampler> AreaWeightedSectionSamplers;
+		FStaticMeshAreaWeightedSectionSampler AreaWeightedSampler;
+
+		AreaWeightedSectionSamplers.AddZeroed(Lod.Sections.Num());
+		for (int i = 0; i < AreaWeightedSectionSamplers.Num(); i++)
+			Ar << AreaWeightedSectionSamplers[i];
+		Ar << AreaWeightedSampler;
+
 		unguard;
 	}
 };
@@ -1773,29 +1893,6 @@ struct FMeshSectionInfo
 	}
 };
 
-/*
-struct FStaticMaterial
-{
-	UMaterialInterface* MaterialInterface;
-	FName				MaterialSlotName;
-	FMeshUVChannelInfo	UVChannelData;
-
-	friend FArchive& operator<<(FArchive& Ar, FStaticMaterial& M)
-	{
-		Ar << M.MaterialInterface << M.MaterialSlotName;
-		if (Ar.ContainsEditorData())
-		{
-			FName ImportedMaterialSlotName;
-			Ar << ImportedMaterialSlotName;
-		}
-		if (FRenderingObjectVersion::Get(Ar) >= FRenderingObjectVersion::TextureStreamingMeshUVChannelData)
-		{
-			Ar << M.UVChannelData;
-		}
-		return Ar;
-	}
-};
-*/
 FArchive& operator<<(FArchive& Ar, FStaticMaterial& M)
 {
 	Ar << M.MaterialInterface << M.MaterialSlotName;
@@ -1856,6 +1953,7 @@ no_nav_collision:
 	if (!StripFlags.IsEditorDataStripped())
 	{
 		DBG_STAT("Serializing %d SourceModels\n", SourceModels.Num());
+		assert(Ar.Game < GAME_UE4(22)); //todo: FEditorObjectVersion::StaticMeshDeprecatedRawMesh
 		for (int i = 0; i < SourceModels.Num(); i++)
 		{
 			// Serialize FRawMeshBulkData
@@ -1886,7 +1984,13 @@ no_nav_collision:
 			Ar << WedgeMap << MaterialIndexToImportIndex;
 		}
 
-		Ar << Lods; // original code: TArray<FStaticMeshLODResources> LODResources
+		Lods.Serialize2<FStaticMeshLODModel4::Serialize>(Ar); // original code: TArray<FStaticMeshLODResources> LODResources
+
+		if (Ar.Game >= GAME_UE4(23))
+		{
+			uint8 NumInlinedLODs;
+			Ar << NumInlinedLODs;
+		}
 
 		guard(PostLODCode);
 
@@ -1894,13 +1998,21 @@ no_nav_collision:
 		{
 			if (Ar.ArVer >= VER_UE4_RENAME_CROUCHMOVESCHARACTERDOWN)
 			{
-				/// reference: 28.08.2014 - f5238f04
+				// UE4.5+, added distance field, reference: 28.08.2014 - f5238f04
 				bool stripped = false;
 				if (Ar.ArVer >= VER_UE4_RENAME_WIDGET_VISIBILITY)
 				{
+					// 4.7+ - using IsDataStrippedForServer for distance field removal
 					/// reference: 13.11.2014 - 48a3c9b7
+					DUMP_ARC_BYTES(Ar, 2);
 					FStripDataFlags StripFlags2(Ar);
-					stripped = StripFlags.IsDataStrippedForServer();
+					stripped = StripFlags2.IsDataStrippedForServer();
+					if (Ar.Game >= GAME_UE4(21))
+					{
+						// 4.21 uses additional strip flag for distance field
+						const uint8 DistanceFieldDataStripFlag = 1;
+						stripped |= StripFlags2.IsClassDataStripped(DistanceFieldDataStripFlag);
+					}
 				}
 				if (!stripped)
 				{
@@ -1949,11 +2061,35 @@ no_nav_collision:
 			// ScreenSize for each LOD
 			int MaxNumLods = (Ar.Game >= GAME_UE4(9)) ? MAX_STATIC_LODS_UE4 : 4;
 			for (int i = 0; i < MaxNumLods; i++)
+			{
+				// Starting with UE4.20 it uses TPerPlatformProperty<float> = FPerPlatformFloat, which has different serializer
+				if (Ar.Game >= GAME_UE4(20))
+				{
+					bool bFloatCooked;
+					Ar << bFloatCooked;
+				}
 				Ar << ScreenSize[i];
+			}
 		}
 
 		unguard;
 	} // end of FStaticMeshRenderData
+
+	if (bCooked && Ar.Game >= GAME_UE4(20))
+	{
+		guard(SerializeOccluderData);
+		// FStaticMeshOccluderData::SerializeCooked
+		bool bHasOccluderData;
+		Ar << bHasOccluderData;
+		if (bHasOccluderData)
+		{
+			TArray<FVector> Vertices;
+			TArray<uint16> Indices;
+			Vertices.BulkSerialize(Ar);
+			Indices.BulkSerialize(Ar);
+		}
+		unguard;
+	}
 
 	if (Ar.Game >= GAME_UE4(14) /* && StaticMaterials.Num() == 0 */) // it seems that StaticMaterials serialized as properties has no material links
 	{
@@ -2008,7 +2144,7 @@ void UStaticMesh4::ConvertMesh()
 	ConvertedMesh = Mesh;
 
 	// convert bounds
-	Mesh->BoundingSphere.R = Bounds.SphereRadius / 2;			//?? UE3 meshes has radius 2 times larger than mesh itself; verifty for UE4
+	Mesh->BoundingSphere.R = Bounds.SphereRadius / 2;			//?? UE3 meshes has radius 2 times larger than mesh itself; verify for UE4
 	VectorSubtract(CVT(Bounds.Origin), CVT(Bounds.BoxExtent), CVT(Mesh->BoundingBox.Min));
 	VectorAdd     (CVT(Bounds.Origin), CVT(Bounds.BoxExtent), CVT(Mesh->BoundingBox.Max));
 
@@ -2025,7 +2161,7 @@ void UStaticMesh4::ConvertMesh()
 
 		if (NumVerts == 0 && NumTexCoords == 0 && lodIndex < Lods.Num()-1)
 		{
-			// UE4.20+, see MinLodDataStripFlag
+			// UE4.20+, see CDSF_MinLodData
 			appPrintf("Lod #%d is stripped, skipping ...\n", lodIndex);
 			continue;
 		}
@@ -2132,7 +2268,7 @@ void UStaticMesh4::ConvertSourceModels()
 
 	// convert bounds
 	// (note: copy-paste of ConvertedMesh's code)
-	Mesh->BoundingSphere.R = Bounds.SphereRadius / 2;			//?? UE3 meshes has radius 2 times larger than mesh itself; verifty for UE4
+	Mesh->BoundingSphere.R = Bounds.SphereRadius / 2;			//?? UE3 meshes has radius 2 times larger than mesh itself; verify for UE4
 	VectorSubtract(CVT(Bounds.Origin), CVT(Bounds.BoxExtent), CVT(Mesh->BoundingBox.Min));
 	VectorAdd     (CVT(Bounds.Origin), CVT(Bounds.BoxExtent), CVT(Mesh->BoundingBox.Max));
 

@@ -23,10 +23,9 @@ bool ExportObjects(const TArray<UObject*> *Objects, IProgressCallback* progress)
 	bool hasObjectList = (Objects != NULL) && Objects->Num();
 
 	//?? when 'Objects' passed, probably iterate over that list instead of GObjObjects
-	for (int idx = 0; idx < UObject::GObjObjects.Num(); idx++)
+	for (UObject* ExpObj : UObject::GObjObjects)
 	{
 		if (progress && !progress->Tick()) return false;
-		UObject* ExpObj = UObject::GObjObjects[idx];
 		bool objectSelected = !hasObjectList || (Objects->FindItem(ExpObj) >= 0);
 
 		if (!objectSelected) continue;
@@ -154,7 +153,9 @@ void SavePackages(const TArray<const CGameFileInfo*>& Packages, IProgressCallbac
 		const CGameFileInfo* mainFile = Packages[i];
 
 		assert(mainFile);
-		if (Progress && !Progress->Progress(mainFile->RelativeName, i, GNumPackageFiles))
+		FStaticString<MAX_PACKAGE_PATH> RelativeName;
+		mainFile->GetRelativeName(RelativeName);
+		if (Progress && !Progress->Progress(*RelativeName, i, GNumPackageFiles))
 			break;
 
 		// Reference in UE4 code: FNetworkPlatformFile::IsAdditionalCookedFileExtension()
@@ -171,20 +172,20 @@ void SavePackages(const TArray<const CGameFileInfo*>& Packages, IProgressCallbac
 
 		for (int ext = 0; ext < ARRAY_COUNT(additionalExtensions); ext++)
 		{
-			char SrcFile[MAX_PACKAGE_PATH];
 			const CGameFileInfo* file = mainFile;
 
 #if UNREAL4
 			// Check for additional UE4 files
 			if (ext > 0)
 			{
-				appStrncpyz(SrcFile, mainFile->RelativeName, ARRAY_COUNT(SrcFile));
-				char* s = strrchr(SrcFile, '.');
-				if (s && (stricmp(s, ".uasset") == 0 || stricmp(s, ".umap") == 0))
+				const char* Ext = mainFile->GetExtension();
+				if (stricmp(Ext, "uasset") == 0 || stricmp(Ext, "umap") == 0)
 				{
+					mainFile->GetRelativeNameNoExt(RelativeName);
+					char* extPlace = &RelativeName[0] + RelativeName.Len();
 					// Find additional file by replacing .uasset extension
-					strcpy(s, additionalExtensions[ext]);
-					file = appFindGameFile(SrcFile);
+					strcpy(extPlace, additionalExtensions[ext]);
+					file = appFindGameFile(*RelativeName);
 					if (!file)
 					{
 						continue;
@@ -198,13 +199,23 @@ void SavePackages(const TArray<const CGameFileInfo*>& Packages, IProgressCallbac
 			}
 #endif // UNREAL4
 
-			FArchive *Ar = appCreateFileReader(file);
+			FArchive *Ar = file->CreateReader();
 			if (Ar)
 			{
 				guard(SaveFile);
 				// prepare destination file
-				char OutFile[1024];
-				appSprintf(ARRAY_ARG(OutFile), "UmodelSaved/%s", file->ShortFilename);
+				char OutFile[2048];
+				FStaticString<MAX_PACKAGE_PATH> Name;
+				if (GSettings.SavePackages.KeepDirectoryStructure)
+				{
+					file->GetRelativeName(Name);
+					appSprintf(ARRAY_ARG(OutFile), "%s/%s", *GSettings.SavePackages.SavePath, *Name);
+				}
+				else
+				{
+					file->GetCleanName(Name);
+					appSprintf(ARRAY_ARG(OutFile), "%s/%s", *GSettings.SavePackages.SavePath, *Name);
+				}
 				appMakeDirectoryForFile(OutFile);
 				FILE *out = fopen(OutFile, "wb");
 				// copy data
@@ -212,7 +223,7 @@ void SavePackages(const TArray<const CGameFileInfo*>& Packages, IProgressCallbac
 				// cleanup
 				delete Ar;
 				fclose(out);
-				unguardf("%s", file->RelativeName);
+				unguardf("%s", *file->GetRelativeName());
 			}
 		}
 	}

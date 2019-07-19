@@ -4,14 +4,21 @@
 
 #if HAS_UI
 
-UISettingsDialog::UISettingsDialog(CUmodelSettings& settings)
-:	Opt(settings)
+UISettingsDialog::UISettingsDialog(CUmodelSettings& settings, OptionsKind kind)
+:	Kind(kind)
+,	Opt(settings)
 ,	OptRef(&settings)
 {}
 
 bool UISettingsDialog::Show()
 {
-	if (!ShowModal("Options", 480, -1))
+	const char* title = "Options";
+	if (Kind == OPT_Export)
+		title = "Export options";
+	else if (Kind == OPT_Save)
+		title = "Save options";
+
+	if (!ShowModal(title, -1, -1))
 		return false;
 
 	*OptRef = Opt;
@@ -29,27 +36,82 @@ void UISettingsDialog::InitUI()
 {
 	guard(UISettingsDialog::InitUI);
 
+	// Show a single page if requested
+	if (Kind != OPT_Full)
+	{
+		UIElement* controlList = NULL;
+		bool* showWindowOpt = NULL;
+		if (Kind == OPT_Export)
+		{
+			controlList = &MakeExportOptions();
+			showWindowOpt = &Opt.bShowExportOptions;
+		}
+		else if (Kind == OPT_Save)
+		{
+			controlList = &MakeSavePackagesOptions();
+			showWindowOpt = &Opt.bShowSaveOptions;
+		}
+		else
+		{
+			appError("UISettingsDialog: unknown 'kind'");
+		}
+
+		assert(*showWindowOpt);
+		(*this)
+		[
+			*controlList
+			+ NewControl(UISpacer)
+				.SetHeight(10)
+			+ NewControl(UIHorizontalLine)
+			+ NewControl(UISpacer)
+				.SetHeight(10)
+			+ NewControl(UIGroup, GROUP_HORIZONTAL_LAYOUT|GROUP_NO_BORDER)
+			[
+				NewControl(UICheckbox, "Don't show this dialog window again", showWindowOpt)
+					.InvertValue()
+				+ NewControl(UISpacer, -1)
+				+ NewControl(UIButton, "OK")
+					.SetWidth(80)
+					.SetOK()
+				+ NewControl(UIButton, "Cancel")
+					.SetWidth(80)
+					.SetCancel()
+			]
+		];
+		return;
+	}
+
+	// Show full options window
 	(*this)
 	[
-		NewControl(UIGroup, GROUP_HORIZONTAL_LAYOUT|GROUP_NO_BORDER)
+		NewControl(UITabControl)
 		.SetWidth(EncodeWidth(1.0f))
 		[
-/*			NewControl(UIGroup, "Display")
-			+*/ NewControl(UIGroup, "Export")
+/*			NewControl(UIGroup, "Display", GROUP_NO_BORDER)
+			+*/
+			NewControl(UIGroup, "Export", GROUP_NO_BORDER)
 			.SetWidth(EncodeWidth(1.0f))
 			[
 				MakeExportOptions()
+			]
+			+ NewControl(UIGroup, "Save packages", GROUP_NO_BORDER)
+			[
+				MakeSavePackagesOptions()
+			]
+			+ NewControl(UIGroup, "Interface", GROUP_NO_BORDER)
+			[
+				MakeUIOptions()
 			]
 		]
 		+ NewControl(UIGroup, GROUP_HORIZONTAL_LAYOUT|GROUP_NO_BORDER)
 		[
 			NewControl(UISpacer, -1)
 			+ NewControl(UIButton, "OK")
-			.SetWidth(EncodeWidth(0.2f))
-			.SetOK()
+				.SetWidth(80)
+				.SetOK()
 			+ NewControl(UIButton, "Cancel")
-			.SetWidth(EncodeWidth(0.2f))
-			.SetCancel()
+				.SetWidth(80)
+				.SetCancel()
 		]
 	];
 
@@ -84,7 +146,29 @@ UIElement& UISettingsDialog::MakeExportOptions()
 			+ NewControl(UICheckbox, "Export LODs", &Opt.Export.ExportMeshLods)
 		]
 		+ NewControl(UICheckbox, "Export compressed textures to dds format", &Opt.Export.ExportDdsTexture)
+		+ NewControl(UICheckbox, "Don't overwrite already exported files", &Opt.Export.DontOverwriteFiles)
 		;
+}
+
+UIElement& UISettingsDialog::MakeSavePackagesOptions()
+{
+	return NewControl(UIGroup, "File Layout")
+		[
+			NewControl(UILabel, "Save to this folder")
+			+ NewControl(UIFilePathEditor, &Opt.SavePackages.SavePath)
+			+ NewControl(UICheckbox, "Keep directory structure", &Opt.SavePackages.KeepDirectoryStructure)
+		];
+}
+
+UIElement& UISettingsDialog::MakeUIOptions()
+{
+	return
+		NewControl(UIGroup, "Confirmations")
+		[
+			NewControl(UICheckbox, "Popup options on export", &Opt.bShowExportOptions)
+			+ NewControl(UICheckbox, "Popup options on save", &Opt.bShowSaveOptions)
+		]
+	;
 }
 
 #endif // HAS_UI

@@ -36,8 +36,14 @@
 #endif
 
 #if USE_DBGHELP
+// prevent "warning C4091: 'typedef ': ignored on left of '' when no variable is declared" with Win7.1 SDK
+#pragma warning(push)
+#pragma warning(disable:4091)
+
 #include <dbghelp.h>
-#endif
+
+#pragma warning(pop)
+#endif // USE_DBGHELP
 
 
 /*-----------------------------------------------------------------------------
@@ -397,7 +403,7 @@ long win32ExceptFilter(struct _EXCEPTION_POINTERS *info)
 
 	if (GIsSwError) return EXCEPTION_EXECUTE_HANDLER;		// no interest to thread context when software-generated errors
 
-	// if FPU exception occured, _clearfp() is required (otherwise, exception will be re-raised again)
+	// if FPU exception occurred, _clearfp() is required (otherwise, exception will be re-raised again)
 	_clearfp();
 
 
@@ -425,7 +431,7 @@ long win32ExceptFilter(struct _EXCEPTION_POINTERS *info)
 			excName = "Integer zero divide";
 			break;
 		case EXCEPTION_PRIV_INSTRUCTION:
-			excName = "Priveleged instruction";
+			excName = "Privileged instruction";
 			break;
 		case EXCEPTION_ILLEGAL_INSTRUCTION:
 			excName = "Illegal opcode";
@@ -518,5 +524,33 @@ void appCopyTextToClipboard(const char* text)
 #endif // HAS_UI
 }
 
+
+#if defined(OLDCRT) && (_MSC_VER  >= 1900)
+
+// Support OLDCRT with VC2015 or newer. VC2015 switched to another CRT model called "Universal CRT".
+// It has some incompatibilities in header files.
+
+// Access stdin/stdout/stderr.
+// UCRT uses __acrt_iob_func(). Older CRT used __iob_func. Also, older CRT used "_iobuf" structure with
+// alias "FILE", however "FILE" in UCRT is just a pointer to something internal structure.
+
+// Define __iob_func locally because it is missing in UCRT
+extern "C" __declspec(dllimport) FILE* __cdecl __iob_func();
+
+// Size of FILE structure for VS2013 and older
+enum { CRT_FILE_SIZE = (sizeof(char*)*3 + sizeof(int)*5) };
+
+// Note that originally this function has dll linkage. We're removing it with _ACRTIMP_ALT="" define
+// in project settings. It is supposed to work correctly as stated in include/.../ucrt/corecrt.h
+// Without that define, both compiler and linker will issue warnings about inconsistent dll linkage.
+// Code would work, however compiler will generate call to __acrt_iob_func via function pointer, and
+// it will add this function to executable exports.
+
+extern "C" FILE* __cdecl __acrt_iob_func(unsigned Index)
+{
+	return (FILE*)((char*)__iob_func() + Index * CRT_FILE_SIZE);
+}
+
+#endif // OLDCRT
 
 #endif // _WIN32

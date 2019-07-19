@@ -6,34 +6,40 @@
 
 #if _WIN32
 #include <direct.h>					// getcwd
-#else
-#include <unistd.h>					// getcwd
 #endif
 
 #define CONFIG_FILE			"umodel.cfg"
 #define EXPORT_DIRECTORY	"UmodelExport"
+#define SAVE_DIRECTORY		"UmodelSaved"
 
 static void SetPathOption(FString& where, const char* value)
 {
 	// determine whether absolute path is used
-	const char* value2;
-
-#if _WIN32
-	int isAbsPath = (value[0] != 0) && (value[1] == ':');
-#else
-	int isAbsPath = (value[0] == '~' || value[0] == '/');
-#endif
-	if (isAbsPath)
+	FStaticString<512> value2;
+	if (*value == '"')
 	{
-		value2 = value;
+		// path enclosed into double quotes
+		value2 = value+1;
+		// remove closing quote
+		value2.RemoveFromEnd("\"");
 	}
 	else
 	{
-		// relative path
+		value2 = value;
+	}
+
+#if _WIN32
+	int isAbsPath = (!value2.IsEmpty() && (value2[1] == ':'));
+#else
+	int isAbsPath = (!value2.IsEmpty() && (value2[0] == '~' || value2[0] == '/'));
+#endif
+	if (!isAbsPath)
+	{
+		// relative path, combine with working directory
 		char path[512];
 #if _WIN32
 		if (!getcwd(ARRAY_ARG(path)))
-			strcpy(path, ".");	// path is too long, or other error occured
+			strcpy(path, ".");	// path is too long, or other error occurred
 #else
 		// for Unix OS, store everything to the HOME directory ("~/...")
 		if (const char* s = getenv("HOME"))
@@ -47,20 +53,22 @@ static void SetPathOption(FString& where, const char* value)
 		}
 #endif
 
-		if (!value || !value[0])
+		if (value2.IsEmpty())
 		{
+			// empty path - use working directory
 			value2 = path;
 		}
 		else
 		{
+			// relative path - prepend working directory
 			char buffer[512];
-			appSprintf(ARRAY_ARG(buffer), "%s/%s", path, value);
+			appSprintf(ARRAY_ARG(buffer), "%s/%s", path, *value2);
 			value2 = buffer;
 		}
 	}
 
 	char finalName[512];
-	appStrncpyz(finalName, value2, ARRAY_COUNT(finalName)-1);
+	appStrncpyz(finalName, *value2, ARRAY_COUNT(finalName)-1);
 	appNormalizeFilename(finalName);
 
 	where = finalName;
@@ -112,6 +120,7 @@ void CExportSettings::Reset()
 	ExportMeshLods = false;
 	SaveUncooked = false;
 	SaveGroups = false;
+	DontOverwriteFiles = false;
 }
 
 void CExportSettings::Apply()
@@ -127,6 +136,18 @@ void CExportSettings::Apply()
 	GExportPNG = ExportPngTexture;
 	GUncook = SaveUncooked;
 	GUseGroups = SaveGroups;
+	GDontOverwriteFiles = DontOverwriteFiles;
+}
+
+void CSavePackagesSettings::SetPath(const char* path)
+{
+	SetPathOption(SavePath, path);
+}
+
+void CSavePackagesSettings::Reset()
+{
+	SetPath(SAVE_DIRECTORY);
+	KeepDirectoryStructure = true;
 }
 
 static void RegisterClasses()
@@ -137,6 +158,7 @@ static void RegisterClasses()
 		BEGIN_CLASS_TABLE
 			REGISTER_CLASS(CStartupSettings)
 			REGISTER_CLASS(CExportSettings)
+			REGISTER_CLASS(CSavePackagesSettings)
 			REGISTER_CLASS(CUmodelSettings)
 		END_CLASS_TABLE
 		registered = true;

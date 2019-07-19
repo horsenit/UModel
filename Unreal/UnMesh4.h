@@ -41,7 +41,7 @@ struct FReferenceSkeleton
 {
 	TArray<FMeshBoneInfo>	RefBoneInfo;
 	TArray<FTransform>		RefBonePose;
-	TMap<FName, int>		NameToIndexMap;
+	TMap<FName, int32>		NameToIndexMap;
 
 	friend FArchive& operator<<(FArchive& Ar, FReferenceSkeleton& S);
 };
@@ -306,21 +306,6 @@ struct FStaticMaterial
 		PROP_OBJ(MaterialInterface)
 		PROP_NAME(MaterialSlotName)
 	END_PROP_TABLE
-
-/*	friend FArchive& operator<<(FArchive& Ar, FStaticMaterial& M)
-	{
-		Ar << M.MaterialInterface << M.MaterialSlotName;
-		if (Ar.ContainsEditorData())
-		{
-			FName ImportedMaterialSlotName;
-			Ar << ImportedMaterialSlotName;
-		}
-		if (FRenderingObjectVersion::Get(Ar) >= FRenderingObjectVersion::TextureStreamingMeshUVChannelData)
-		{
-			Ar << M.UVChannelData;
-		}
-		return Ar;
-	} */
 };
 
 class UStaticMesh4 : public UObject
@@ -470,16 +455,9 @@ struct FRawCurveTracks
 		PROP_ARRAY(FloatCurves, FFloatCurve)
 	END_PROP_TABLE
 
-	friend FArchive& operator<<(FArchive& Ar, FRawCurveTracks& T)
-	{
-		guard(FRawCurveTracks<<);
-		// This structure is always serialized as property list
-		FRawCurveTracks::StaticGetTypeinfo()->SerializeUnrealProps(Ar, &T);
-		return Ar;
-		unguard;
-	}
-
 	void PostSerialize(FArchive& Ar);
+
+	friend FArchive& operator<<(FArchive& Ar, FRawCurveTracks& T);
 };
 
 

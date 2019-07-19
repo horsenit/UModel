@@ -162,7 +162,7 @@ function ut4()
 {
 	CheckDir C:/3-UnrealEngine/UnrealTournamentDev/UnrealTournament/Content/Paks
 #	CheckDir C:/Projects/Epic/UnrealTournament4/UnrealTournament/Saved/Cooked/WindowsNoEditor/UnrealTournament/Content
-	run -game=ue4.16 $*
+	run -game=ut4 $*
 }
 function paragon()
 {
@@ -171,8 +171,9 @@ function paragon()
 }
 function fortnite()
 {
+	read aes < "Docs/fortnite.txt"
 	CheckDir C:/3-UnrealEngine/Fortnite/FortniteGame/Content/Paks
-	run -game=ue4.22 $*
+	run -game=ue4.23 -aes=$aes $*
 }
 function ue3()
 {
@@ -254,7 +255,7 @@ for arg in "$@"; do		# using quoted $@ will allow to correctly separate argument
 		usage
 		;;
 	--64)
-		buildopt=vc-win64
+		buildopt=--64
 		;;
 	--nobuild)
 		nobuild=1
@@ -264,6 +265,7 @@ for arg in "$@"; do		# using quoted $@ will allow to correctly separate argument
 		nobuild=1
 		;;
 	--debug)
+		buildopt=--debug
 		debugOpt=-debug
 		;;
 	--path=*)

@@ -134,7 +134,7 @@ byte *CTextureData::Decompress(int MipLevel)
 			int y0 = y % 16;
 			if (x0 == 0)			d[0] = 255;	// red - binormal axis
 			else if (y0 == 0)		d[2] = 255;	// blue - tangent axis
-			else if (x0 + y0 < 7)	d[1] = 128;	// gark green
+			else if (x0 + y0 < 7)	d[1] = 128;	// dark green
 		}
 		return dst;
 	}
@@ -713,7 +713,7 @@ bool CTextureData::DecodeXBox360(int MipLevel)
 
 #if SUPPORT_PS4
 
-// Reference code taken from this forum thread: http://www.gildor.org/smf/index.php/topic,6221.0.html
+// Reference code taken from this forum thread: https://www.gildor.org/smf/index.php/topic,6221.0.html
 
 static void map_block_position(int x, int y, int w, int bx, int& xout, int& yout)
 {
@@ -843,7 +843,7 @@ bool CTextureData::DecodePS4(int MipLevel)
 //   "bytes_per_gob_y" computation - reference code just works with value 8, we have different ones.
 
 // Note: 'dataSize' param is used only for verification
-static void UntileCompressedNSWTexture(const byte *src, int dataSize, byte *dst, int width, int height, int blockSizeX, int blockSizeY, int bytesPerBlock)
+static bool UntileCompressedNSWTexture(const byte *src, int dataSize, byte *dst, int width, int height, int blockSizeX, int blockSizeY, int bytesPerBlock)
 {
 	guard(UntileCompressedNSWTexture);
 
@@ -870,7 +870,9 @@ static void UntileCompressedNSWTexture(const byte *src, int dataSize, byte *dst,
 	if (blockHeight < 32) bytes_per_gob_y = 2;
 	if (blockHeight < 16) bytes_per_gob_y = 1;
 
-//	appPrintf("mip: %d x %d (%d/%d x %d/%d)\n", blockWidth, blockHeight, width, blockSizeX, height, blockSizeY);
+//	appPrintf("mip: %d x %d (%d/%d x %d/%d) data: comp: %X, real: %X\n",
+//		blockWidth, blockHeight, width, blockSizeX, height, blockSizeY,
+//		blockWidth * blockHeight * bytesPerBlock, dataSize);
 	// Iterate over image blocks
 	for (int dy = 0; dy < blockHeight; dy++)
 	{
@@ -894,7 +896,8 @@ static void UntileCompressedNSWTexture(const byte *src, int dataSize, byte *dst,
 			unsigned swzAddr = gobOffset + offset;
 //			if (swzAddr >= dataSize) appPrintf("x=%d/%d, y=%d/%d, sy=%d, swzAddr=%d+%d->%d >= %d\n",
 //				dx, blockWidth, dy, blockHeight, bytes_per_gob_y, gobOffset, offset, swzAddr, dataSize);
-			assert(swzAddr < dataSize);
+			if (swzAddr >= dataSize)
+				return false; // failed, something's wrong with parameters or decoder
 
 			byte       *pDst = dst + (dy * blockWidth + dx) * bytesPerBlock;
 			const byte *pSrc = src + swzAddr;
@@ -902,6 +905,7 @@ static void UntileCompressedNSWTexture(const byte *src, int dataSize, byte *dst,
 		}
 	}
 
+	return true;
 	unguard;
 }
 
@@ -923,6 +927,51 @@ bool CTextureData::DecodeNSW(int MipLevel)
 		return true;
 	}
 
+#if 0
+	// experimental alignment of texture sizes
+	int XAlign = 1, YAlign = 1;
+	if (Info.BlockSizeX > 1)
+	{
+		// Compressed texture
+		if (Mip.USize < 512)
+			XAlign = 32;
+		else if (Mip.USize < 1024)
+			XAlign = 128;
+		else
+			XAlign = 512;
+		if (Mip.VSize < 512)
+			YAlign = 32;
+		else if (Mip.VSize < 1024)
+			YAlign = 128;
+		else
+			YAlign = 512;
+	}
+	else
+	{
+		// RGBA texture
+		if (Mip.USize < 512)
+			XAlign = 8;
+		else if (Mip.USize < 1024)
+			XAlign = 32;
+		else
+			XAlign = 128;
+		if (Mip.VSize < 512)
+			YAlign = 8;
+		else if (Mip.VSize < 1024)
+			YAlign = 32;
+		else
+			YAlign = 128;
+	}
+//	XAlign = 32; YAlign = 32;
+
+	appPrintf("mip %d x %d -> align %d,%d -> %d x %d\n", Mip.USize, Mip.VSize, XAlign, YAlign, Align(Mip.USize, XAlign), Align(Mip.VSize, YAlign));
+
+	Mip.USize = Align(Mip.USize, XAlign);
+	Mip.VSize = Align(Mip.VSize, YAlign);
+	//?? if code will work, we should avoid REAL alignment of texture dimensions as it adds border to texture. We should unpack
+	//?? it instead with removal of alignment borders
+#endif
+
 	int UBlockSize = Mip.USize / Info.BlockSizeX;
 	int VBlockSize = Mip.VSize / Info.BlockSizeY;
 	int TotalBlocks = Mip.DataSize / Info.BytesPerBlock;
@@ -943,7 +992,14 @@ bool CTextureData::DecodeNSW(int MipLevel)
 
 	// untile (unswizzle)
 	byte *buf = (byte*)appMalloc(Mip.DataSize);
-	UntileCompressedNSWTexture(Mip.CompressedData, Mip.DataSize, buf, Mip.USize, Mip.VSize, Info.BlockSizeX, Info.BlockSizeY, Info.BytesPerBlock);
+	if (!UntileCompressedNSWTexture(Mip.CompressedData, Mip.DataSize, buf, Mip.USize, Mip.VSize, Info.BlockSizeX, Info.BlockSizeY, Info.BytesPerBlock))
+	{
+		appFree(buf);
+#if DEBUG_PLATFORM_TEX
+		appPrintf("... can't untile NSW texture, dropping mip\n");
+#endif
+		return false;
+	}
 
 	Mip.SetOwnedDataBuffer(buf, max(UBlockSize, 1) * max(VBlockSize, 1) * Info.BytesPerBlock);
 	return true;	// no error

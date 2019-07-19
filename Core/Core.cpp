@@ -49,10 +49,10 @@ void appPrintf(const char *fmt, ...)
 
 
 /*-----------------------------------------------------------------------------
-	Simple error/notofication functions
+	Simple error/notification functions
 -----------------------------------------------------------------------------*/
 
-bool GIsSwError = false;			// software-gererated error
+bool GIsSwError = false;			// software-generated error
 
 void appError(const char *fmt, ...)
 {
@@ -467,6 +467,116 @@ bool appContainsWildcard(const char *string)
 	if (strchr(string, ',')) return true;
 	if (strchr(string, '?')) return true;
 	return false;
+}
+
+
+/*-----------------------------------------------------------------------------
+	Command line helpers
+-----------------------------------------------------------------------------*/
+
+void appParseResponseFile(const char* filename, int& outArgc, const char**& outArgv)
+{
+	guard(appParseResponseFile);
+
+	FILE* f = fopen(filename, "r");
+	if (!f)
+	{
+		appError("Unable to find command line file \"%s\"", filename);
+	}
+	// Determine file size
+	fseek(f, 0, SEEK_END);
+	size_t len = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	// Allocate buffer, we'll never release it
+	char* buffer = (char*)appMalloc(len+1);
+	// Read contents. Note that on Windows, fread will skip 'r' characters in text mode.
+	len = fread(buffer, 1, len, f);
+	if (len == 0)
+	{
+		appError("Unable to read command line file \"%s\"", filename);
+	}
+	fclose(f);
+	buffer[len] = 0;
+
+	// Parse in 2 passes: count number of arguments, then store result
+	for (int pass = 0; pass < 2; pass++)
+	{
+		char* s = buffer;
+		int argc = 1; // reserve argv[0] for executable name
+		while (*s)
+		{
+			// Skip whitespace
+			while (isspace(*s))
+			{
+				s++;
+			}
+			if (*s == 0) break;
+			// Skip comments
+			if (*s == '#' || *s == ';')
+			{
+				s++;
+				while (*s != 0 && *s != '\n')
+				{
+					s++;
+				}
+				continue;
+			}
+			// Parameter
+			if (*s == '"')
+			{
+				s++; // skip quote
+				// Process quoted strings
+				if (pass) outArgv[argc] = s;
+				while (*s != '"' && *s != 0 && *s != '\n')
+				{
+					s++;
+				}
+				if (pass) *s = 0;
+				s++; // skip quote
+				argc++;
+			}
+			else
+			{
+				// Regular string
+				if (pass) outArgv[argc] = s;
+				while (!isspace(*s) && *s != 0)
+				{
+					if (*s == '"')
+					{
+						// Quotes in the middle of parameter (-path="..." etc) - include spaces
+						s++;
+						while (*s != '"'&& *s != '\n' && *s != 0)
+						{
+							s++;
+						}
+						if (*s == '"')
+						{
+							// Skip closing quote so it won't be erased
+							s++;
+						}
+					}
+					else
+					{
+						s++;
+					}
+				}
+				if (pass) *s = 0;
+				s++; // skip space
+				argc++;
+			}
+		}
+
+		if (pass == 0)
+		{
+			// Allocate argv[] array (will never release it)
+			outArgv = new const char*[argc+1];
+			outArgv[0] = "";			// placeholder for executable name
+			outArgv[argc] = NULL;		// next-after-last is NULL
+			outArgc = argc;
+		}
+	}
+
+	unguard;
 }
 
 

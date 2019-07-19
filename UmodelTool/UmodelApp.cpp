@@ -169,13 +169,14 @@ bool CUmodelApp::ShowPackageUI()
 		TStaticArray<UnPackage*, 256> Packages;
 		for (int i = 0; i < GPackageDialog.SelectedPackages.Num(); i++)
 		{
-			const char* pkgName = GPackageDialog.SelectedPackages[i]->RelativeName;
-			if (!progress.Progress(pkgName, i, GPackageDialog.SelectedPackages.Num()))
+			FStaticString<MAX_PACKAGE_PATH> RelativeName;
+			GPackageDialog.SelectedPackages[i]->GetRelativeName(RelativeName);
+			if (!progress.Progress(*RelativeName, i, GPackageDialog.SelectedPackages.Num()))
 			{
 				cancelled = true;
 				break;
 			}
-			UnPackage* package = UnPackage::LoadPackage(pkgName);	// should always return non-NULL
+			UnPackage* package = UnPackage::LoadPackage(*RelativeName);		// should always return non-NULL
 			if (package) Packages.Add(package);
 		}
 		if (cancelled)
@@ -184,7 +185,12 @@ bool CUmodelApp::ShowPackageUI()
 			continue;
 		}
 
-		if (!Packages.Num()) break;			// should not happen
+		if (!Packages.Num())
+		{
+			// This will happen only if all selected packages has failed to load (wrong package tag etc).
+			// Show the package UI again.
+			continue;
+		}
 
 		// register exporters and classes (will be performed only once); use any package
 		// to detect an engine version
@@ -250,7 +256,7 @@ bool CUmodelApp::ShowPackageUI()
 
 		progress.CloseDialog();
 
-		// Viewer was released if we're releasing package which is currenly used for viewing.
+		// Viewer was released if we're releasing package which is currently used for viewing.
 		if (!Viewer)
 		{
 			FindObjectAndCreateVisualizer(1, true, true);
@@ -524,6 +530,14 @@ void CUmodelApp::ProcessKey(int key, bool isDown)
 	case 's'|KEY_ALT:
 		DoScreenshot = 2;
 		break;
+	case 'x'|KEY_CTRL:
+#if HAS_UI
+		if (Viewer && UISettingsDialog::ShowExportOptions(GSettings))
+#else
+		if (Viewer)
+#endif
+			Viewer->Export();
+		break;
 #if HAS_UI
 	case 'o':
 		ShowPackageUI();
@@ -556,7 +570,9 @@ void CUmodelApp::DrawTexts()
 		DrawKeyHelp("PgUp/PgDn", "browse objects");
 #if HAS_UI
 		DrawKeyHelp("O",         "open package");
+		DrawKeyHelp("Ctrl+O",    "show options");
 #endif
+		DrawKeyHelp("Ctrl+X",	 "export object");
 		DrawKeyHelp("Ctrl+S",    "take screenshot");
 		Viewer->ShowHelp();
 		DrawTextLeft("-----\n");		// divider
@@ -628,7 +644,11 @@ void CUmodelApp::CreateMenu()
 		+ NewSubmenu("Tools")
 		[
 			NewMenuItem("Export current object\tCtrl+X")
-			.SetCallback(BIND_LAMBDA([this]() { if (Viewer) Viewer->Export(); }))
+			.SetCallback(BIND_LAMBDA([this]()
+				{
+					if (Viewer && UISettingsDialog::ShowExportOptions(GSettings))
+						Viewer->Export();
+				}))
 			+ NewMenuSeparator()
 			+ NewMenuHyperLink("Open export folder", *GSettings.Export.ExportPath)	//!! should update if directory will be changed from UI
 			+ NewMenuHyperLink("Open screenshots folder", SCREENSHOTS_DIR)
@@ -654,10 +674,10 @@ void CUmodelApp::CreateMenu()
 			+ NewMenuHyperLink("Tutorial videos", "https://www.youtube.com/playlist?list=PLJROJrENPVvK-V8PCTR9qBmY0Q7v4wCym")
 			+ NewMenuSeparator()
 			+ NewMenuHyperLink("UModel website", GUmodelHomepage)
-			+ NewMenuHyperLink("UModel FAQ", "http://www.gildor.org/projects/umodel/faq")
-			+ NewMenuHyperLink("Compatibility information", "http://www.gildor.org/projects/umodel/compat")
-			+ NewMenuHyperLink("UModel forums", "http://www.gildor.org/smf/")
-			+ NewMenuHyperLink("Donate", "http://www.gildor.org/en/donate")
+			+ NewMenuHyperLink("UModel FAQ", "https://www.gildor.org/projects/umodel/faq")
+			+ NewMenuHyperLink("Compatibility information", "https://www.gildor.org/projects/umodel/compat")
+			+ NewMenuHyperLink("UModel forums", "https://www.gildor.org/smf/")
+			+ NewMenuHyperLink("Donate", "https://www.gildor.org/en/donate")
 			+ NewMenuSeparator()
 			+ NewMenuItem("About UModel")
 			.SetCallback(BIND_STATIC(&UIAboutDialog::Show))

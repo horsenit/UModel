@@ -6,6 +6,8 @@
 #include "UnPackage.h"			// for accessing FPackageFileSummary from FByteBulkData
 #endif
 
+#include <errno.h>				// not needed for VC
+
 #if _WIN32
 #include <io.h>					// for _filelengthi64
 #endif
@@ -585,7 +587,9 @@ bool FFileArchive::OpenFile()
 	f = fopen64(FullName, Mode);
 	if (f) return true;			// success
 	if (!(Options & FAO_NoOpenError))
-		appError("Unable to open file %s", FullName);
+	{
+		appError("Can't open file (%s) %s", strerror(errno), FullName);
+	}
 
 	return false;
 	unguard;
@@ -992,6 +996,8 @@ void FByteBulkData::SerializeHeader(FArchive &Ar)
 	{
 		guard(Bulk4);
 
+		bIsUE4Data = true;
+
 		Ar << BulkDataFlags << ElementCount;
 		Ar << BulkDataSizeOnDisk;
 		if (Ar.ArVer < VER_UE4_BULKDATA_AT_LARGE_OFFSETS)
@@ -1294,7 +1300,7 @@ void FByteBulkData::SerializeData(FArchive &Ar)
 		FArchive* loader = NULL;
 		if (info)
 		{
-			loader = appCreateFileReader(info);
+			loader = info->CreateReader();
 			assert(loader);
 		}
 		else
@@ -1372,11 +1378,16 @@ bool FByteBulkData::SerializeData(const UObject* MainObj) const
 #if UNREAL4
 	guard(FByteBulkData::SerializeData(UObject*));
 
+	assert(bIsUE4Data); // the function is supported only for UE4 games
+
 	if (!(BulkDataFlags & (BULKDATA_OptionalPayload|BULKDATA_PayloadInSeperateFile)))
 	{
 		// Already serialized, see FByteBulkData::Serialize()
+		assert(CanReloadBulk() == false);
 		return true;
 	}
+
+	assert(CanReloadBulk() == true);
 
 	char bulkFileName[256];
 	bulkFileName[0] = 0;
@@ -1402,7 +1413,7 @@ bool FByteBulkData::SerializeData(const UObject* MainObj) const
 		return false;
 	}
 
-	FArchive *Ar = appCreateFileReader(bulkFile);
+	FArchive *Ar = bulkFile->CreateReader();
 	Ar->SetupFrom(*Package);
 #if DEBUG_BULK
 	appPrintf("%s: Bulk %X %llX [%d] f=%X (%s)\n", MainObj->Name, this, this->BulkDataOffsetInFile, this->ElementCount, this->BulkDataFlags, bulkFileName);
@@ -1415,7 +1426,7 @@ bool FByteBulkData::SerializeData(const UObject* MainObj) const
 #else
 	appError("FByteBulkData::SerializeData(UObject*) call");
 	return false;
-#endif
+#endif // UNREAL4
 }
 
 

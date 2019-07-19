@@ -29,7 +29,7 @@ At the moment this library supports only Windows platform, however it was design
 STL support
 -----------
 
-The library was created specially for [UModel project](http://www.gildor.org/en/projects/umodel). Therefore it uses UModel internal structures
+The library was created specially for [UModel project](https://www.gildor.org/en/projects/umodel). Therefore it uses UModel internal structures
 to hold information, in particular - TArray and FString (these classes are inspired by Unreal engine API). To make library usable in other
 projects, we have created a special wrappers which could be found in [stl-stub](stl-stub) directory. Simply copy them to the main UI library
 folder, or set up compiler include paths to use these directories.
@@ -37,7 +37,7 @@ folder, or set up compiler include paths to use these directories.
 Callback / delegate class
 -------------------------
 
-This library shipped with [Callback class](callback.h) used for binding any function, class method or labmda as an action to UI event. This
+This library shipped with [Callback class](callback.h) used for binding any function, class method or lambda as an action to UI event. This
 class is self-containing, doesn't depend on other UI library parts, on any other C++ library and/or STL. It could be used separately from UI
 library if you need the functionality it provides. The Callback class has been made with use of modern C++, so you will need C++11 supporting
 compiler. For more details please refer to [class' source code](callback.h) (read comments in file header).

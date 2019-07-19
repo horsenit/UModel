@@ -325,6 +325,7 @@ static void PrintUsage()
 #if HAS_UI
 			"       umodel [command] [options] <directory>\n"
 #endif
+			"       umodel @<response_file>\n"
 			"\n"
 			"    <package>       name of package to load - this could be a file name\n"
 			"                    with or without extension, or wildcard\n"
@@ -386,6 +387,7 @@ static void PrintUsage()
 			"Platform selection:\n"
 			"    -ps3            Playstation 3\n"
 			"    -ps4            Playstation 4\n"
+			"    -nsw            Nintendo Switch\n"
 			"    -ios            iOS (iPhone/iPad)\n"
 			"    -android        Android\n"
 			"\n");
@@ -508,6 +510,14 @@ static void ExceptionHandler()
 // AbortHandler on linux will cause infinite recurse, but works well on Windows
 static void AbortHandler(int signal)
 {
+	if (GErrorHistory[0])
+	{
+		appPrintf("abort called during error handling\n", signal);
+#if VSTUDIO_INTEGRATION
+		__debugbreak();
+#endif
+		exit(1);
+	}
 	appError("abort() called");
 }
 #endif
@@ -654,12 +664,15 @@ static void TestStrings()
 #define OPT_NBOOL(name,var)				{ name, (byte*)&var, false },
 #define OPT_VALUE(name,var,value)		{ name, (byte*)&var, value },
 
-int main(int argc, char **argv)
+int main(int argc, const char **argv)
 {
 	appInitPlatform();
 
 #if PRIVATE_BUILD
 	appPrintf("PRIVATE BUILD\n");
+#endif
+#if MAX_DEBUG
+	appPrintf("DEBUG BUILD\n");
 #endif
 
 #if DO_GUARD
@@ -671,6 +684,14 @@ int main(int argc, char **argv)
 #endif
 
 	guard(Main);
+
+	if (argc == 2 && argv[1][0] == '@')
+	{
+		// Should read command line from a file
+		const char* appName = argv[0];
+		appParseResponseFile(argv[1]+1, argc, argv);
+		argv[0] = appName;
+	}
 
 	// display usage
 #if !HAS_UI
@@ -748,6 +769,7 @@ int main(int argc, char **argv)
 			// platform
 			OPT_VALUE("ps3",     GSettings.Startup.Platform, PLATFORM_PS3)
 			OPT_VALUE("ps4",     GSettings.Startup.Platform, PLATFORM_PS4)
+			OPT_VALUE("nsw",     GSettings.Startup.Platform, PLATFORM_SWITCH)
 			OPT_VALUE("ios",     GSettings.Startup.Platform, PLATFORM_IOS)
 			OPT_VALUE("android", GSettings.Startup.Platform, PLATFORM_ANDROID)
 			// compression
@@ -831,7 +853,7 @@ int main(int argc, char **argv)
 		else if (!strnicmp(opt, "aes=", 4))
 		{
 			GAesKey = opt+4;
-			GAesKey.TrimStartAndEnd();
+			GAesKey.TrimStartAndEndInline();
 			CheckHexAesKey();
 		}
 		// information commands
@@ -855,6 +877,10 @@ int main(int argc, char **argv)
 		{
 			PrintVersionInfo();
 			return 0;
+		}
+		else if (!stricmp(opt, "debug"))
+		{
+			// Do nothing if this option is not supported
 		}
 		else
 		{
@@ -956,7 +982,6 @@ int main(int argc, char **argv)
 	// Note: in this code, packages will be loaded without creating any exported objects.
 	for (int i = 0; i < packagesToLoad.Num(); i++)
 	{
-//		UnPackage *Package = UnPackage::LoadPackage(packagesToLoad[i]);
 		TStaticArray<const CGameFileInfo*, 32> Files;
 		appFindGameFiles(packagesToLoad[i], Files);
 
@@ -968,11 +993,22 @@ int main(int argc, char **argv)
 		{
 			for (int j = 0; j < Files.Num(); j++)
 			{
-				GameFiles.Add(Files[j]);
+				bool failed = false;
 				if (bShouldLoadPackages)
 				{
-					UnPackage* Package = UnPackage::LoadPackage(Files[j]->RelativeName);
-					Packages.Add(Package);
+					UnPackage* Package = UnPackage::LoadPackage(*Files[j]->GetRelativeName());
+					if (Package)
+					{
+						Packages.Add(Package);
+					}
+					else
+					{
+						failed = true;
+					}
+				}
+				if (!failed)
+				{
+					GameFiles.Add(Files[j]);
 				}
 			}
 		}

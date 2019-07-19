@@ -9,7 +9,14 @@
 
 #include <ObjBase.h>		// CoInitialize()
 #include <Shlwapi.h>		// SH* functions
+
+// prevent "warning C4091: 'typedef ': ignored on left of 'tagGPFIDL_FLAGS' when no variable is declared" with Win7.1 SDK
+#pragma warning(push)
+#pragma warning(disable:4091)
+
 #include <Shlobj.h>			// SHBrowseForFolder
+// Restore warnings
+#pragma warning(pop)
 
 #undef PLATFORM_UNKNOWN
 
@@ -55,12 +62,12 @@ UIFilePathEditor::UIFilePathEditor(FString* path)
 #endif
 }
 
-void UIFilePathEditor::Create(UIBaseDialog* dialog)
+void UIFilePathEditor::Create(UICreateContext& ctx)
 {
-	Super::Create(dialog);
+	Super::Create(ctx);
 	InitializeOLE();
 	SHAutoComplete(Editor->GetWnd(), SHACF_FILESYS_DIRS);
-	DlgWnd = dialog->GetWnd();
+	DlgWnd = ctx.dialog->GetWnd();
 }
 
 void UIFilePathEditor::AddCustomControls()
@@ -158,12 +165,12 @@ UIFileNameEditor::UIFileNameEditor(FString* path)
 #endif
 }
 
-void UIFileNameEditor::Create(UIBaseDialog* dialog)
+void UIFileNameEditor::Create(UICreateContext& ctx)
 {
-	Super::Create(dialog);
+	Super::Create(ctx);
 	InitializeOLE();
 	SHAutoComplete(Editor->GetWnd(), SHACF_FILESYS_ONLY);
-	DlgWnd = dialog->GetWnd();
+	DlgWnd = ctx.dialog->GetWnd();
 }
 
 void UIFileNameEditor::AddCustomControls()

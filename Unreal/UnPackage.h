@@ -8,10 +8,6 @@
 #	define PKG_LOG(...)
 #endif
 
-#ifndef USE_COMPACT_PACKAGE_STRUCTS
-#define USE_COMPACT_PACKAGE_STRUCTS		1		// define if you want to drop/skip data which are not used in framework
-#endif
-
 
 #if UNREAL4
 // Callback called when unversioned package was found.
@@ -155,7 +151,12 @@ struct FPackageFileSummary
 	int64		BulkDataStartOffset;
 #endif
 
-	friend FArchive& operator<<(FArchive &Ar, FPackageFileSummary &S);
+	FPackageFileSummary();
+	bool Serialize(FArchive &Ar);
+	// Engine-specific serializers
+	void Serialize2(FArchive& Ar);
+	void Serialize3(FArchive& Ar);
+	void Serialize4(FArchive& Ar);
 };
 
 #if UNREAL3
@@ -166,19 +167,21 @@ struct FPackageFileSummary
 struct FObjectExport
 {
 	int32		ClassIndex;					// object reference
-	int32		SuperIndex;					// object reference
 	int32		PackageIndex;				// object reference
 	FName		ObjectName;
 	int32		SerialSize;
 	int32		SerialOffset;
 	UObject		*Object;					// not serialized, filled by object loader
+#if !USE_COMPACT_PACKAGE_STRUCTS
+	int32		SuperIndex;					// object reference
 	uint32		ObjectFlags;
+#endif
 #if UNREAL3
 	uint32		ExportFlags;				// EF_* flags
 	#if !USE_COMPACT_PACKAGE_STRUCTS
 	uint32		ObjectFlags2;				// really, 'uint64 ObjectFlags'
 	int32		Archetype;
-//	TMap<FName, int> ComponentMap;			-- this field was removed from UE3, so serialize it as a temporaty variable when needed
+//	TMap<FName, int> ComponentMap;			-- this field was removed from UE3, so serialize it as a temporary variable when needed
 	TArray<int32> NetObjectCount;			// generations
 	FGuid		Guid;
 	int32		PackageFlags;
@@ -188,18 +191,25 @@ struct FObjectExport
 #endif // UNREAL3
 
 	friend FArchive& operator<<(FArchive &Ar, FObjectExport &E);
+	// Engine-specific serializers
+	void Serialize2(FArchive& Ar);
+	void Serialize2X(FArchive& Ar);
+	void Serialize3(FArchive& Ar);
+	void Serialize4(FArchive& Ar);
 };
 
 
 struct FObjectImport
 {
+#if !USE_COMPACT_PACKAGE_STRUCTS
 	FName		ClassPackage;
+#endif
 	FName		ClassName;
 	int32		PackageIndex;
 	FName		ObjectName;
 	bool		Missing;					// not serialized
 
-	friend FArchive& operator<<(FArchive &Ar, FObjectImport &I);
+	void Serialize(FArchive& Ar);
 };
 
 #if UNREAL3
@@ -223,8 +233,9 @@ class UnPackage : public FArchive
 	DECLARE_ARCHIVE(UnPackage, FArchive);
 public:
 	const char*				Filename;			// full name with path and extension
-	const char*				Name;				// short name
+	const char*				Name;				// short name without extension
 	FArchive				*Loader;
+
 	// package header
 	FPackageFileSummary		Summary;
 	// tables
@@ -240,6 +251,9 @@ protected:
 	~UnPackage();
 
 public:
+	// Check if constructor has created a valid package
+	bool IsValid() const { return Summary.NameCount > 0; }
+
 	// Load package using short name (without path and extension) or full path name.
 	// When the package is already loaded, this function will simply return a pointer
 	// to previously loaded UnPackage.
